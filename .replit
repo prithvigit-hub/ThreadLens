@@ -42,13 +42,13 @@ waitForPort = 5000
 name = "Backend API"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd backend && python main.py"
-waitForPort = 8000
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "fuser -k 8000/tcp 2>/dev/null; sleep 1; cd backend && python main.py"
+waitForPort = 8000
 
 [[ports]]
 localPort = 5000
