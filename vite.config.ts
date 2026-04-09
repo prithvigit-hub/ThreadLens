@@ -4,13 +4,10 @@ import path from "path";
 
 export default defineConfig({
   server: {
-    host: "0.0.0.0",
+    host: "::",
     port: 5000,
-    allowedHosts: true,
     strictPort: true,
-    hmr: {
-      overlay: false,
-    },
+    allowedHosts: true,
   },
   plugins: [react()],
   resolve: {
