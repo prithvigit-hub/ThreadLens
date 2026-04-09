@@ -227,6 +227,15 @@ def chat(req: ChatRequest):
         response = chat_with_ai(req.message, req.history)
         timestamp = datetime.utcnow().strftime("%H:%M")
 
+        # Detect off-topic response
+        if response.strip() == "__OFFTOPIC__":
+            return {
+                "success": True,
+                "off_topic": True,
+                "response": "",
+                "timestamp": timestamp,
+            }
+
         # Persist to chat session if session_id provided
         if req.session_id:
             try:
@@ -243,6 +252,7 @@ def chat(req: ChatRequest):
 
         return {
             "success": True,
+            "off_topic": False,
             "response": response,
             "timestamp": timestamp,
         }

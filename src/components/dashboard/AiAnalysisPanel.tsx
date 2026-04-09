@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Loader2 } from "lucide-react";
 import { api, type ChatMessage } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface Props {
   sessionId?: string | null;
@@ -16,6 +17,7 @@ const INITIAL_MESSAGES: ChatMessage[] = [
 ];
 
 export function AiAnalysisPanel({ sessionId, onSessionCreated }: Props) {
+  const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,6 +76,26 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated }: Props) {
     try {
       let sid = currentSessionId;
 
+      // Pass all prior messages (excluding the current user message) as history
+      const history = currentMessages
+        .slice(0, -1)
+        .filter((m) => m.role === "user" || m.role === "ai")
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const data = await api.chat(text, history.length > 0 ? history : undefined, sid ?? undefined);
+
+      // Off-topic: remove the user message and show warning
+      if (data.off_topic) {
+        setMessages((prev) => prev.filter((m) => m.id !== currentMessages[currentMessages.length - 1].id));
+        toast({
+          title: "Off-topic question",
+          description: "I can only answer cybersecurity and log analysis questions. Please ask something related to security.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Only create a session after a valid domain answer
       if (!sid) {
         const session = await api.createChatSession(text.slice(0, 60));
         sid = session.session_id;
@@ -81,13 +103,6 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated }: Props) {
         onSessionCreated?.(sid, session.title);
       }
 
-      // Pass all prior messages (excluding the current user message) as history
-      const history = currentMessages
-        .slice(0, -1)
-        .filter((m) => m.role === "user" || m.role === "ai")
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      const data = await api.chat(text, history.length > 0 ? history : undefined, sid);
       const aiMsg: ChatMessage = { id: `ai-${Date.now()}`, role: "ai", content: data.response, timestamp: data.timestamp };
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
