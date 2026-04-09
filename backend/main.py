@@ -1,0 +1,341 @@
+import os
+import csv
+import json
+import io
+import uuid
+from datetime import datetime
+from typing import Optional
+
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel
+
+from database import get_db, ping_db
+from parser import parse_logs
+from detector import detect_threats
+from llm import analyze_event, investigate_sequence, chat_with_ai
+
+app = FastAPI(title="LLM Forensic Investigator API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ─── Health ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+def health():
+    db_ok = False
+    try:
+        db_ok = ping_db()
+    except Exception:
+        pass
+    return {"status": "ok", "db_connected": db_ok}
+
+
+# ─── Upload ────────────────────────────────────────────────────────────────────
+
+@app.post("/api/upload")
+async def upload_logs(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(400, "No file provided")
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ("txt", "log", "csv"):
+        raise HTTPException(400, "Unsupported file type. Use .txt, .log, or .csv")
+
+    content = (await file.read()).decode("utf-8", errors="replace")
+    if not content.strip():
+        raise HTTPException(400, "File is empty")
+
+    parsed = parse_logs(content)
+    if not parsed:
+        raise HTTPException(400, "No parseable log entries found in file")
+
+    db = get_db()
+    for entry in parsed:
+        entry["_id"] = str(uuid.uuid4())
+        entry["source_file"] = file.filename
+        entry["ingested_at"] = datetime.utcnow().isoformat()
+
+    db["logs"].insert_many(parsed)
+
+    alerts = detect_threats(parsed)
+    for alert in alerts:
+        alert["_id"] = str(uuid.uuid4())
+        alert["created_at"] = datetime.utcnow().isoformat()
+    if alerts:
+        db["alerts"].insert_many(alerts)
+
+    session_doc = {
+        "_id": str(uuid.uuid4()),
+        "date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "logs_analyzed": len(parsed),
+        "threats_detected": len(alerts),
+        "source_file": file.filename,
+        "status": "completed",
+        "created_at": datetime.utcnow().isoformat(),
+        "duration": "—",
+    }
+    db["sessions"].insert_one(session_doc)
+
+    return {
+        "success": True,
+        "logs_parsed": len(parsed),
+        "threats_detected": len(alerts),
+        "session_id": session_doc["_id"],
+    }
+
+
+# ─── Logs ──────────────────────────────────────────────────────────────────────
+
+@app.get("/api/logs")
+def get_logs(limit: int = Query(100, le=500)):
+    db = get_db()
+    docs = list(db["logs"].find({}, {"_id": 1, "timestamp": 1, "ip": 1, "event": 1,
+                                     "status": 1, "risk": 1, "suspicious": 1, "level": 1, "raw": 1})
+                .sort("ingested_at", -1).limit(limit))
+    for d in docs:
+        d["id"] = d.pop("_id")
+    return {"logs": docs, "total": len(docs)}
+
+
+# ─── Live Logs ─────────────────────────────────────────────────────────────────
+
+import random
+
+_LIVE_EVENTS = [
+    "SSH login attempt", "Failed authentication", "Port scan detected",
+    "Firewall rule triggered", "Suspicious outbound connection",
+    "Privilege escalation attempt", "Brute force detected",
+    "Malware signature match", "DNS tunneling suspected",
+    "Unauthorized file access", "Normal HTTP request",
+    "Database query executed", "User session created",
+    "Config file modified", "Service restarted", "Backup completed",
+    "Certificate renewed", "API rate limit warning",
+]
+_LIVE_IPS = [
+    "192.168.1.105", "10.0.0.42", "172.16.0.88", "45.33.32.156",
+    "203.0.113.50", "198.51.100.23", "192.0.2.1", "185.220.101.34",
+    "91.219.236.222", "178.128.0.12",
+]
+_SUSPICIOUS = {
+    "Port scan detected", "Suspicious outbound connection",
+    "Privilege escalation attempt", "Brute force detected",
+    "Malware signature match", "DNS tunneling suspected", "Failed authentication",
+}
+
+
+def _gen_live_log():
+    event = random.choice(_LIVE_EVENTS)
+    is_sus = event in _SUSPICIOUS
+    return {
+        "id": str(uuid.uuid4()),
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "ip": random.choice(_LIVE_IPS),
+        "event": event,
+        "level": "critical" if is_sus and random.random() > 0.5 else ("error" if is_sus else "info"),
+        "suspicious": is_sus,
+        "status": "failed" if is_sus else "success",
+        "risk": "high" if is_sus else "low",
+    }
+
+
+@app.get("/api/live-logs")
+def live_logs(count: int = Query(10, le=50)):
+    logs = [_gen_live_log() for _ in range(count)]
+    # Also try to fetch real recent logs from DB if available
+    try:
+        db = get_db()
+        real = list(db["logs"].find({}, {"_id": 1, "timestamp": 1, "ip": 1, "event": 1,
+                                          "suspicious": 1, "level": 1, "status": 1, "risk": 1})
+                    .sort("ingested_at", -1).limit(count))
+        for d in real:
+            d["id"] = d.pop("_id")
+        if real:
+            return {"logs": real}
+    except Exception:
+        pass
+    return {"logs": logs}
+
+
+# ─── Alerts ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/alerts")
+def get_alerts():
+    try:
+        db = get_db()
+        docs = list(db["alerts"].find({}, {"_id": 1, "type": 1, "ip": 1, "risk": 1,
+                                            "timestamp": 1, "description": 1, "resolved": 1, "title": 1})
+                    .sort("created_at", -1).limit(100))
+        for d in docs:
+            d["id"] = d.pop("_id")
+            d["source"] = d.get("ip", "unknown")
+        return {"alerts": docs}
+    except Exception:
+        return {"alerts": []}
+
+
+# ─── Analyze ───────────────────────────────────────────────────────────────────
+
+class AnalyzeRequest(BaseModel):
+    event: dict
+    context: Optional[list] = None
+
+
+@app.post("/api/analyze")
+def analyze(req: AnalyzeRequest):
+    try:
+        result = analyze_event(req.event)
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(500, f"LLM analysis failed: {str(e)}")
+
+
+# ─── Investigate ───────────────────────────────────────────────────────────────
+
+class InvestigateRequest(BaseModel):
+    logs: list
+
+
+@app.post("/api/investigate")
+def investigate(req: InvestigateRequest):
+    if not req.logs:
+        raise HTTPException(400, "No logs provided")
+    try:
+        result = investigate_sequence(req.logs)
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(500, f"Investigation failed: {str(e)}")
+
+
+# ─── Chat / Ask AI ─────────────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[list] = None
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    try:
+        response = chat_with_ai(req.message, req.context)
+        return {
+            "success": True,
+            "response": response,
+            "timestamp": datetime.utcnow().strftime("%H:%M"),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"AI chat failed: {str(e)}")
+
+
+# ─── Sessions ──────────────────────────────────────────────────────────────────
+
+class SessionRequest(BaseModel):
+    date: Optional[str] = None
+    logs_analyzed: int = 0
+    threats_detected: int = 0
+    duration: str = "—"
+    status: str = "completed"
+
+
+@app.post("/api/session")
+def create_session(req: SessionRequest):
+    db = get_db()
+    doc = {
+        "_id": str(uuid.uuid4()),
+        "date": req.date or datetime.utcnow().strftime("%Y-%m-%d"),
+        "logs_analyzed": req.logs_analyzed,
+        "threats_detected": req.threats_detected,
+        "duration": req.duration,
+        "status": req.status,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    db["sessions"].insert_one(doc)
+    return {"success": True, "session_id": doc["_id"]}
+
+
+@app.get("/api/sessions")
+def get_sessions():
+    try:
+        db = get_db()
+        docs = list(db["sessions"].find({}, {"_id": 1, "date": 1, "logs_analyzed": 1,
+                                              "threats_detected": 1, "duration": 1, "status": 1})
+                    .sort("created_at", -1).limit(50))
+        for d in docs:
+            d["id"] = d.pop("_id")
+            d["logsAnalyzed"] = d.pop("logs_analyzed", 0)
+            d["threatsDetected"] = d.pop("threats_detected", 0)
+        return {"sessions": docs}
+    except Exception:
+        return {"sessions": []}
+
+
+# ─── Export ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/export")
+def export(format: str = Query("json", enum=["json", "csv"]), collection: str = Query("logs", enum=["logs", "alerts"])):
+    db = get_db()
+    docs = list(db[collection].find({}, {"_id": 0}).limit(1000))
+
+    if format == "json":
+        content = json.dumps(docs, indent=2, default=str)
+        return StreamingResponse(
+            io.StringIO(content),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename={collection}.json"},
+        )
+    else:
+        if not docs:
+            raise HTTPException(404, "No data to export")
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=list(docs[0].keys()))
+        writer.writeheader()
+        writer.writerows(docs)
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={collection}.csv"},
+        )
+
+
+# ─── Stats ─────────────────────────────────────────────────────────────────────
+
+@app.get("/api/stats")
+def stats():
+    try:
+        db = get_db()
+        total_logs = db["logs"].count_documents({})
+        total_alerts = db["alerts"].count_documents({})
+        unresolved = db["alerts"].count_documents({"resolved": False})
+        high_risk = db["alerts"].count_documents({"risk": "high", "resolved": False})
+        last_alert = db["alerts"].find_one({}, sort=[("created_at", -1)])
+        last_ts = last_alert.get("timestamp") if last_alert else None
+        return {
+            "logs_analyzed": total_logs,
+            "threats_detected": total_alerts,
+            "unresolved_alerts": unresolved,
+            "high_risk_alerts": high_risk,
+            "risk_level": "High" if high_risk > 0 else ("Medium" if unresolved > 0 else "Low"),
+            "last_incident": last_ts,
+        }
+    except Exception:
+        return {
+            "logs_analyzed": 0,
+            "threats_detected": 0,
+            "unresolved_alerts": 0,
+            "high_risk_alerts": 0,
+            "risk_level": "Low",
+            "last_incident": None,
+        }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("BACKEND_PORT", "8000"))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
