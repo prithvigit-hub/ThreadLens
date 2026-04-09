@@ -8,10 +8,6 @@ export default defineConfig({
     port: 5000,
     strictPort: true,
     allowedHosts: true,
-  },
-  plugins: [react()],
-  server: {
-    ...undefined,
     proxy: {
       "/api": {
         target: "http://localhost:8000",
@@ -19,6 +15,7 @@ export default defineConfig({
       },
     },
   },
+  plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

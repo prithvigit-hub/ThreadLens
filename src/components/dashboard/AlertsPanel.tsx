@@ -1,6 +1,11 @@
-import { useState } from "react";
-import { mockAlerts, type Alert } from "@/data/mockData";
-import { ChevronRight, AlertTriangle, Info, XCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { api, type Alert } from "@/lib/api";
+import { mockAlerts } from "@/data/mockData";
+import { ChevronRight, AlertTriangle } from "lucide-react";
+
+function toAlert(a: (typeof mockAlerts)[0]): Alert {
+  return { ...a, type: a.title, source: a.source };
+}
 
 function RiskBadge({ risk }: { risk: Alert["risk"] }) {
   const styles = {
@@ -9,14 +14,23 @@ function RiskBadge({ risk }: { risk: Alert["risk"] }) {
     low: "threat-badge-low",
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[risk]}`}>
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[risk] ?? "threat-badge-low"}`}>
       {risk.toUpperCase()}
     </span>
   );
 }
 
 export function AlertsPanel() {
+  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts.map(toAlert));
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+
+  useEffect(() => {
+    api.getAlerts()
+      .then((data) => { if (data.alerts?.length) setAlerts(data.alerts); })
+      .catch(() => {});
+  }, []);
+
+  const unresolved = alerts.filter((a) => !a.resolved).length;
 
   return (
     <div className="glass-panel rounded-xl flex flex-col h-[400px] animate-fade-in">
@@ -25,9 +39,7 @@ export function AlertsPanel() {
           <AlertTriangle className="w-4 h-4 text-threat-medium" />
           Active Alerts
         </h3>
-        <span className="text-xs text-destructive font-medium">
-          {mockAlerts.filter((a) => !a.resolved).length} unresolved
-        </span>
+        <span className="text-xs text-destructive font-medium">{unresolved} unresolved</span>
       </div>
 
       {selectedAlert ? (
@@ -62,7 +74,7 @@ export function AlertsPanel() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto scrollbar-cyber">
-          {mockAlerts.map((alert) => (
+          {alerts.map((alert) => (
             <button
               key={alert.id}
               onClick={() => setSelectedAlert(alert)}
@@ -72,7 +84,11 @@ export function AlertsPanel() {
             >
               <div
                 className={`w-2 h-2 rounded-full shrink-0 ${
-                  alert.risk === "high" ? "bg-destructive animate-pulse" : alert.risk === "medium" ? "bg-threat-medium" : "bg-threat-low"
+                  alert.risk === "high"
+                    ? "bg-destructive animate-pulse"
+                    : alert.risk === "medium"
+                    ? "bg-threat-medium"
+                    : "bg-threat-low"
                 }`}
               />
               <div className="flex-1 min-w-0">

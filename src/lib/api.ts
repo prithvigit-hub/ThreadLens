@@ -1,0 +1,107 @@
+const BASE = "";
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export const api = {
+  health: () => request<{ status: string; db_connected: boolean }>("/api/health"),
+
+  stats: () =>
+    request<{
+      logs_analyzed: number;
+      threats_detected: number;
+      unresolved_alerts: number;
+      high_risk_alerts: number;
+      risk_level: string;
+      last_incident: string | null;
+    }>("/api/stats"),
+
+  getLogs: (limit = 100) =>
+    request<{ logs: LogEntry[]; total: number }>(`/api/logs?limit=${limit}`),
+
+  getLiveLogs: (count = 15) =>
+    request<{ logs: LogEntry[] }>(`/api/live-logs?count=${count}`),
+
+  getAlerts: () => request<{ alerts: Alert[] }>("/api/alerts"),
+
+  uploadLogs: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<{ success: boolean; logs_parsed: number; threats_detected: number; session_id: string }>(
+      "/api/upload",
+      { method: "POST", body: form, headers: {} }
+    );
+  },
+
+  analyze: (event: object) =>
+    request<{
+      explanation: string;
+      attack_type: string;
+      risk_level: string;
+      why_dangerous: string;
+      recommended_actions: string[];
+    }>("/api/analyze", { method: "POST", body: JSON.stringify({ event }) }),
+
+  investigate: (logs: object[]) =>
+    request<{
+      attack_flow: string;
+      root_cause: string;
+      attacker_intent: string;
+      affected_systems: string[];
+      severity: string;
+      remediation_steps: string[];
+      summary: string;
+    }>("/api/investigate", { method: "POST", body: JSON.stringify({ logs }) }),
+
+  chat: (message: string, context?: object[]) =>
+    request<{ success: boolean; response: string; timestamp: string }>("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({ message, context }),
+    }),
+
+  getSessions: () => request<{ sessions: Session[] }>("/api/sessions"),
+
+  exportData: (format: "json" | "csv", collection: "logs" | "alerts") =>
+    fetch(`/api/export?format=${format}&collection=${collection}`),
+};
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  ip: string;
+  event: string;
+  level: "info" | "warning" | "error" | "critical";
+  suspicious: boolean;
+  status: string;
+  risk: string;
+  raw?: string;
+}
+
+export interface Alert {
+  id: string;
+  title: string;
+  description: string;
+  risk: "low" | "medium" | "high";
+  timestamp: string;
+  source: string;
+  resolved: boolean;
+  type?: string;
+}
+
+export interface Session {
+  id: string;
+  date: string;
+  logsAnalyzed: number;
+  threatsDetected: number;
+  duration: string;
+  status: "completed" | "in-progress";
+}

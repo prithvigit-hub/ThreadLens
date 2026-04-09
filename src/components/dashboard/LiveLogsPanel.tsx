@@ -1,18 +1,35 @@
 import { useEffect, useState, useRef } from "react";
-import { generateLogEntry, type LogEntry } from "@/data/mockData";
-import { generateInitialLogs } from "@/data/mockData";
+import { api, type LogEntry } from "@/lib/api";
+import { generateLogEntry, generateInitialLogs } from "@/data/mockData";
+
+function toApiLog(l: ReturnType<typeof generateLogEntry>): LogEntry {
+  return { ...l, status: "unknown", risk: "low", raw: "" };
+}
 
 export function LiveLogsPanel() {
-  const [logs, setLogs] = useState<LogEntry[]>(() => generateInitialLogs(30));
+  const [logs, setLogs] = useState<LogEntry[]>(() => generateInitialLogs(30).map(toApiLog));
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setLogs((prev) => {
-        const newLog = generateLogEntry(0);
-        return [newLog, ...prev.slice(0, 99)];
-      });
-    }, 2000);
+    const poll = async () => {
+      try {
+        const data = await api.getLiveLogs(15);
+        if (data.logs?.length) {
+          setLogs((prev) => {
+            const ids = new Set(prev.map((l) => l.id));
+            const fresh = data.logs.filter((l) => !ids.has(l.id));
+            if (!fresh.length) return prev;
+            return [...fresh, ...prev].slice(0, 100);
+          });
+          return;
+        }
+      } catch (_) {}
+      const newLog = toApiLog(generateLogEntry(0));
+      setLogs((prev) => [newLog, ...prev.slice(0, 99)]);
+    };
+
+    poll();
+    const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
   }, []);
 
