@@ -1,16 +1,22 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { Layout } from "@/components/Layout";
+import { MetricsSection } from "@/components/dashboard/MetricsSection";
+import { LiveLogsPanel } from "@/components/dashboard/LiveLogsPanel";
+import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
+import { AiAnalysisPanel } from "@/components/dashboard/AiAnalysisPanel";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <Layout>
+      <div className="space-y-6">
+        <MetricsSection />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <LiveLogsPanel />
+          <AlertsPanel />
+        </div>
+        <AiAnalysisPanel />
+      </div>
+    </Layout>
   );
 };
-
-const Index = PlaceholderIndex;
 
 export default Index;
