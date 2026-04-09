@@ -40,7 +40,7 @@ export function AiAnalysisPanel() {
       const errMsg: ChatMessage = {
         id: `ai-err-${Date.now()}`,
         role: "ai",
-        content: "Sorry, the AI service is unavailable right now. Please ensure the GEMINI_API_KEY is set correctly.",
+        content: "Sorry, the AI service is unavailable right now. Please ensure the GROQ_API_KEY is set correctly.",
         timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
       };
       setMessages((prev) => [...prev, errMsg]);
