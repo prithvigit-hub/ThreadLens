@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Upload, Plug, Settings, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Upload, Plug, Settings, ShieldCheck, ShieldAlert, LogOut } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 interface TopNavbarProps {
