@@ -540,6 +540,83 @@ def stats():
         }
 
 
+# ─── Demo Simulation ───────────────────────────────────────────────────────────
+
+_DEMO_EVENTS = [
+    ("SSH brute force attempt", "login", "failed", "high", True),
+    ("Port scan detected from external IP", "access", "failed", "high", True),
+    ("Multiple failed authentication attempts", "login", "failed", "high", True),
+    ("Suspicious outbound connection to known C2", "access", "failed", "high", True),
+    ("Privilege escalation attempt via sudo", "login", "failed", "high", True),
+    ("Malware signature detected in process", "error", "failed", "high", True),
+    ("DNS tunneling activity detected", "access", "failed", "high", True),
+    ("Unauthorized /etc/passwd access attempt", "error", "failed", "high", True),
+    ("Firewall rule triggered: blocked inbound", "access", "success", "medium", False),
+    ("Normal HTTP GET /api/health", "access", "success", "low", False),
+    ("User session created: root login", "login", "success", "medium", False),
+    ("Config file modified: /etc/ssh/sshd_config", "access", "success", "medium", True),
+    ("Backup completed successfully", "unknown", "success", "low", False),
+    ("Service restarted: nginx", "unknown", "success", "low", False),
+    ("API rate limit warning", "access", "failed", "medium", True),
+]
+
+_DEMO_IPS = ["45.33.32.156", "203.0.113.50", "185.220.101.34", "91.219.236.222", "178.128.0.12",
+             "192.168.1.105", "10.0.0.42", "172.16.0.88", "198.51.100.23", "192.0.2.1"]
+
+
+@app.post("/api/demo/simulate")
+def demo_simulate():
+    db = get_db()
+    ingested_at = datetime.utcnow().isoformat()
+    logs = []
+    for i, (event, event_type, status, risk, suspicious) in enumerate(_DEMO_EVENTS):
+        ip = random.choice(_DEMO_IPS)
+        log = {
+            "_id": str(uuid.uuid4()),
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "ip": ip,
+            "event": event,
+            "event_type": event_type,
+            "status": status,
+            "risk": risk,
+            "suspicious": suspicious,
+            "level": "critical" if risk == "high" else ("error" if risk == "medium" else "info"),
+            "raw": f"[DEMO] {datetime.utcnow().isoformat()} {ip} {event}",
+            "source_file": "demo_simulation",
+            "ingested_at": ingested_at,
+        }
+        logs.append(log)
+
+    db["logs"].insert_many(logs)
+
+    suspicious_logs = [l for l in logs if l["suspicious"]]
+    alerts = detect_threats(suspicious_logs)
+    for a in alerts:
+        a["_id"] = str(uuid.uuid4())
+        a["created_at"] = ingested_at
+    if alerts:
+        db["alerts"].insert_many(alerts)
+
+    session_doc = {
+        "_id": str(uuid.uuid4()),
+        "date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "logs_analyzed": len(logs),
+        "threats_detected": len(alerts),
+        "source_file": "Demo Attack Simulation",
+        "status": "completed",
+        "created_at": ingested_at,
+        "duration": "0s",
+    }
+    db["sessions"].insert_one(session_doc)
+
+    return {
+        "success": True,
+        "logs_inserted": len(logs),
+        "alerts_inserted": len(alerts),
+        "session_id": session_doc["_id"],
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("BACKEND_PORT", "8000"))

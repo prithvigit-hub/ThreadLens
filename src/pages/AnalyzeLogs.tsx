@@ -1,5 +1,6 @@
 import { Layout } from "@/components/Layout";
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Upload, FileText, Plug, Play, CheckCircle, AlertCircle, Loader2, X, HardDrive } from "lucide-react";
 
 interface UploadResult {
@@ -33,6 +34,7 @@ function formatBytes(bytes: number): string {
 const MAX_SIZE = 10 * 1024 * 1024 * 1024; // 10 GB
 
 const AnalyzeLogs = () => {
+  const navigate = useNavigate();
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [endpoint, setEndpoint] = useState("");
@@ -42,6 +44,7 @@ const AnalyzeLogs = () => {
   const [processingStatus, setProcessingStatus] = useState<JobStatus | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentFilename, setCurrentFilename] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -62,15 +65,18 @@ const AnalyzeLogs = () => {
           setProcessingJobId(null);
           setUploading(false);
           setUploadProgress(0);
-          setResult({
-            success: true,
-            logs_parsed: job.logs_parsed ?? 0,
-            threats_detected: job.threats_detected ?? 0,
-            session_id: job.session_id ?? "",
-            file_size_mb: job.file_size_mb ?? 0,
-            truncated: job.truncated ?? false,
-          });
           setSelectedFiles([]);
+          navigate("/report", {
+            state: {
+              success: true,
+              logs_parsed: job.logs_parsed ?? 0,
+              threats_detected: job.threats_detected ?? 0,
+              session_id: job.session_id ?? "",
+              file_size_mb: job.file_size_mb ?? 0,
+              truncated: job.truncated ?? false,
+              filename: currentFilename,
+            },
+          });
         } else if (job.status === "failed") {
           clearInterval(pollRef.current!);
           setProcessingJobId(null);
@@ -131,6 +137,7 @@ const AnalyzeLogs = () => {
   const handleUpload = () => {
     if (!selectedFiles.length) return;
     const file = selectedFiles[0];
+    setCurrentFilename(file.name);
     setUploading(true);
     setResult(null);
     setError(null);
@@ -234,24 +241,6 @@ const AnalyzeLogs = () => {
           </div>
         )}
 
-        {result && (
-          <div className="glass-panel rounded-xl p-4 space-y-2 border-safe/30">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="w-5 h-5 text-safe shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-foreground">Upload Successful</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {result.logs_parsed.toLocaleString()} logs parsed · {result.threats_detected} threats detected · {result.file_size_mb} MB processed
-                </p>
-                {result.truncated && (
-                  <p className="text-xs text-yellow-500 mt-1">
-                    File was very large — first 10,000,000 log entries were stored.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {selectedFiles.length > 0 && (
           <div className="glass-panel rounded-xl p-4 space-y-3">

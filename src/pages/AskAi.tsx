@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { AiAnalysisPanel } from "@/components/dashboard/AiAnalysisPanel";
@@ -18,6 +19,8 @@ function formatDate(iso: string) {
 }
 
 const AskAi = () => {
+  const location = useLocation();
+  const initialMessage = (location.state as { initialMessage?: string } | null)?.initialMessage;
   const queryClient = useQueryClient();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState<string>("");
@@ -60,7 +63,6 @@ const AskAi = () => {
   return (
     <Layout>
       <div className="flex gap-4 h-[calc(100vh-120px)]">
-        {/* History Sidebar */}
         <div className="w-64 shrink-0 flex flex-col glass-panel rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -118,7 +120,6 @@ const AskAi = () => {
           </div>
         </div>
 
-        {/* Main Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -136,6 +137,7 @@ const AskAi = () => {
           <AiAnalysisPanel
             sessionId={activeSessionId}
             onSessionCreated={handleSessionCreated}
+            initialMessage={initialMessage}
           />
         </div>
       </div>

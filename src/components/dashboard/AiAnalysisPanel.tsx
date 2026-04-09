@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 interface Props {
   sessionId?: string | null;
   onSessionCreated?: (id: string, title: string) => void;
+  initialMessage?: string;
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = [
@@ -16,15 +17,30 @@ const INITIAL_MESSAGES: ChatMessage[] = [
   },
 ];
 
-export function AiAnalysisPanel({ sessionId, onSessionCreated }: Props) {
+export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage }: Props) {
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialMessage ?? "");
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(sessionId ?? null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevSessionId = useRef<string | null | undefined>(undefined);
+  const didAutoSend = useRef(false);
+
+  useEffect(() => {
+    if (initialMessage && !didAutoSend.current) {
+      didAutoSend.current = true;
+      const ts = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+      const userMsg: ChatMessage = { id: `u-auto`, role: "user", content: initialMessage, timestamp: ts };
+      setMessages((prev) => {
+        const updated = [...prev, userMsg];
+        sendToAI(initialMessage, updated, ts);
+        return updated;
+      });
+      setInput("");
+    }
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

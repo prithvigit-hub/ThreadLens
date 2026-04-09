@@ -1,17 +1,45 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import Login from "./pages/Login.tsx";
+import Home from "./pages/Home.tsx";
+import Dashboard from "./pages/Dashboard.tsx";
 import LiveMonitoring from "./pages/LiveMonitoring.tsx";
 import AnalyzeLogs from "./pages/AnalyzeLogs.tsx";
 import HistoryPage from "./pages/HistoryPage.tsx";
 import AskAi from "./pages/AskAi.tsx";
 import SettingsPage from "./pages/SettingsPage.tsx";
+import ReportPage from "./pages/ReportPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
+
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function AppRoutes() {
+  const { isAuthenticated } = useAuth();
+
+  return (
+    <Routes>
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+      <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+      <Route path="/monitoring" element={<PrivateRoute><LiveMonitoring /></PrivateRoute>} />
+      <Route path="/analyze" element={<PrivateRoute><AnalyzeLogs /></PrivateRoute>} />
+      <Route path="/report" element={<PrivateRoute><ReportPage /></PrivateRoute>} />
+      <Route path="/history" element={<PrivateRoute><HistoryPage /></PrivateRoute>} />
+      <Route path="/ask-ai" element={<PrivateRoute><AskAi /></PrivateRoute>} />
+      <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -19,15 +47,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/monitoring" element={<LiveMonitoring />} />
-          <Route path="/analyze" element={<AnalyzeLogs />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/ask-ai" element={<AskAi />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

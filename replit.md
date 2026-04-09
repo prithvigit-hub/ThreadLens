@@ -1,40 +1,86 @@
 # LLM Forensic Investigator
 
 ## Overview
-An LLM-powered log forensic investigation tool built with React, TypeScript, Vite, and Tailwind CSS. Provides a dashboard for monitoring logs, detecting threats, analyzing incidents, and interacting with AI for forensic analysis.
+A full-stack LLM-powered log forensic investigation SaaS dashboard. Built with React + TypeScript (frontend) and FastAPI + Python (backend), connecting to MongoDB and Groq LLM API.
 
 ## Architecture
-- **Frontend only** — pure React SPA, no backend server
-- **Framework**: React 18 + TypeScript + Vite
-- **Styling**: Tailwind CSS + shadcn/ui component library
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: FastAPI (Python) on port 8000
+- **Database**: MongoDB (via database.py)
+- **AI**: Groq API (llama-3.3-70b-versatile) for chat, event analysis, and investigation
 - **Routing**: React Router DOM v6
 - **State/Data**: TanStack React Query
 
-## Pages
-- `/` — Dashboard (overview, live log stream, active alerts, AI analysis)
-- `/monitoring` — Live Monitoring
-- `/analyze` — Analyze Logs
-- `/history` — History
-- `/ask-ai` — Ask AI
-- `/settings` — Settings
+## Routes
+- `/login` — Login page (mock auth, any email + password)
+- `/` — Home landing page (ChatGPT-style, AI query box + action cards)
+- `/dashboard` — Security dashboard (metrics, alerts, AI chat, demo simulation)
+- `/monitoring` — Live monitoring (start/stop with Demo Mode or API endpoint)
+- `/analyze` — Upload log files (async background processing)
+- `/report` — Analysis report (after upload, shows threats + AI investigation)
+- `/ask-ai` — AI chat with session history
+- `/history` — Session history
+- `/settings` — Settings with system status + user profile
+
+## Key Features
+- **Auth**: Mock login with localStorage persistence, private route protection
+- **Home**: ChatGPT-style landing with AI query box and 3 action cards
+- **Upload**: Async file processing up to 10 GB / 10M log entries, with polling progress
+- **Report**: Auto-redirect after upload with AI forensic investigation button
+- **Live Monitoring**: Manual start/stop with Demo Mode (simulated attacks)
+- **Demo Simulation**: POST /api/demo/simulate generates realistic attack log data
+- **AI Chat**: Cybersecurity-scoped chat with conversation history + off-topic detection
+
+## Backend Endpoints
+- `GET /api/health` — Backend + DB health check
+- `POST /api/upload` — Async file upload (returns job_id immediately)
+- `GET /api/upload/status/{job_id}` — Poll upload processing status
+- `POST /api/demo/simulate` — Insert demo attack logs + alerts
+- `POST /api/chat` — AI chat (cybersecurity domain only)
+- `POST /api/analyze` — Analyze a single security event
+- `POST /api/investigate` — AI forensic investigation of log sequence
+- `GET /api/logs` — Get stored logs
+- `GET /api/alerts` — Get alerts
+- `GET /api/stats` — Dashboard statistics
+- `GET /api/live-logs` — Live log stream
+- `GET /api/sessions` — Upload session history
+- `POST/GET/DELETE /api/chat/sessions` — Chat session management
 
 ## Project Structure
 ```
 src/
-  App.tsx          # Root component with routing
-  main.tsx         # Entry point
-  pages/           # Route-level page components
-  components/      # Shared UI components (shadcn/ui + custom)
-  hooks/           # Custom React hooks
-  lib/             # Utility functions
-  data/            # Static/mock data
+  contexts/AuthContext.tsx  # Mock auth with localStorage
+  pages/
+    Login.tsx               # Login page
+    Home.tsx                # ChatGPT-style landing page
+    Dashboard.tsx           # Security dashboard + demo simulation
+    AnalyzeLogs.tsx         # File upload with async processing
+    ReportPage.tsx          # Post-upload analysis report
+    LiveMonitoring.tsx      # Controllable live log monitoring
+    AskAi.tsx               # AI chat with history sidebar
+    HistoryPage.tsx         # Upload session history
+    SettingsPage.tsx        # Settings + system status + user profile
+  components/
+    Layout.tsx              # App shell (sidebar + topbar)
+    AppSidebar.tsx          # Navigation + user info + logout
+    TopNavbar.tsx           # Header with threat status
+    dashboard/
+      MetricsSection.tsx    # Stats cards
+      AlertsPanel.tsx       # Active alerts list
+      LiveLogsPanel.tsx     # Real-time log stream (isActive prop)
+      AiAnalysisPanel.tsx   # AI chat component (supports initialMessage)
+backend/
+  main.py                   # FastAPI app with all endpoints
+  llm.py                    # Groq AI integration
+  parser.py                 # Log line parser
+  detector.py               # Threat detection
+  database.py               # MongoDB connection
 ```
 
-## Dev & Run
-- **Dev server**: `npm run dev` (runs on port 5000)
-- **Build**: `npm run build` (outputs to `dist/`)
+## Secrets Required
+- `GROQ_API_KEY` — Groq AI API key for chat and analysis features
 
-## Migration Notes (Lovable → Replit)
-- Removed `lovable-tagger` from vite config (dev-only Lovable tool)
-- Updated Vite server to use `host: "0.0.0.0"` and `port: 5000` for Replit compatibility
-- Deployment configured as static site (Vite build → `dist/`)
+## Dev & Run
+- **Frontend**: `npm run dev` (port 5000, via "Start application" workflow)
+- **Backend**: `cd backend && python main.py` (port 8000, via "Backend API" workflow)
+- **Build**: `npm run build` (outputs to `dist/`)
