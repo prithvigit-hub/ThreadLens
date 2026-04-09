@@ -60,10 +60,17 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated }: Props) {
 
     const ts = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: text, timestamp: ts };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setLoading(true);
 
+    setMessages((prev) => {
+      const updated = [...prev, userMsg];
+      sendToAI(text, updated, ts);
+      return updated;
+    });
+    setInput("");
+  };
+
+  const sendToAI = async (text: string, currentMessages: ChatMessage[], ts: string) => {
+    setLoading(true);
     try {
       let sid = currentSessionId;
 
@@ -74,7 +81,13 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated }: Props) {
         onSessionCreated?.(sid, session.title);
       }
 
-      const data = await api.chat(text, undefined, sid);
+      // Pass all prior messages (excluding the current user message) as history
+      const history = currentMessages
+        .slice(0, -1)
+        .filter((m) => m.role === "user" || m.role === "ai")
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const data = await api.chat(text, history.length > 0 ? history : undefined, sid);
       const aiMsg: ChatMessage = { id: `ai-${Date.now()}`, role: "ai", content: data.response, timestamp: data.timestamp };
       setMessages((prev) => [...prev, aiMsg]);
     } catch {

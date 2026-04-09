@@ -6,6 +6,13 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 _client = None
 
+SYSTEM_PROMPT = (
+    "You are an AI cybersecurity analyst assistant integrated into an LLM-Powered "
+    "Log Forensic Investigator dashboard. You help security professionals analyze logs, "
+    "detect threats, and respond to incidents. Always remember and reference prior messages "
+    "in the conversation to give contextually accurate, coherent responses."
+)
+
 
 def _get_client():
     global _client
@@ -21,7 +28,35 @@ def _chat(prompt: str) -> str:
     client = _get_client()
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def _chat_with_history(question: str, history: list[dict]) -> str:
+    """Send a message with full conversation history for context-aware responses."""
+    client = _get_client()
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    for msg in history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user":
+            messages.append({"role": "user", "content": content})
+        elif role in ("ai", "assistant"):
+            messages.append({"role": "assistant", "content": content})
+
+    messages.append({"role": "user", "content": question})
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
         temperature=0.7,
         max_tokens=1024,
     )
@@ -78,13 +113,7 @@ Respond ONLY with a JSON object (no markdown, no code blocks) with exactly these
     return json.loads(text)
 
 
-def chat_with_ai(question: str, context: list[dict] = None) -> str:
-    ctx = ""
-    if context:
-        ctx = f"\n\nRecent security context:\n{json.dumps(context[:10], indent=2)}"
-    prompt = f"""You are an AI cybersecurity analyst assistant integrated into an LLM-Powered Log Forensic Investigator dashboard.{ctx}
-
-User question: {question}
-
-Provide a clear, actionable, expert response. Be concise but thorough."""
-    return _chat(prompt)
+def chat_with_ai(question: str, history: list[dict] = None) -> str:
+    if history:
+        return _chat_with_history(question, history)
+    return _chat(question)

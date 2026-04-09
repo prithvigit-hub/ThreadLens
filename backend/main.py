@@ -217,14 +217,14 @@ def investigate(req: InvestigateRequest):
 
 class ChatRequest(BaseModel):
     message: str
-    context: Optional[list] = None
+    history: Optional[list] = None
     session_id: Optional[str] = None
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     try:
-        response = chat_with_ai(req.message, req.context)
+        response = chat_with_ai(req.message, req.history)
         timestamp = datetime.utcnow().strftime("%H:%M")
 
         # Persist to chat session if session_id provided
