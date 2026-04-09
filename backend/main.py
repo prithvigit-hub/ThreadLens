@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from database import get_db, ping_db
-from parser import parse_logs
+from parser import parse_logs, parse_line
 from detector import detect_threats
 from llm import analyze_event, investigate_sequence, chat_with_ai
 
@@ -40,6 +40,12 @@ def health():
 
 # ─── Upload ────────────────────────────────────────────────────────────────────
 
+MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024  # 1 GB
+MAX_STORED_LINES = 1_000_000               # cap stored docs at 1M
+BATCH_SIZE = 5_000                         # insert batch size
+READ_CHUNK = 512 * 1024                    # 512 KB read chunks
+
+
 @app.post("/api/upload")
 async def upload_logs(file: UploadFile = File(...)):
     if not file.filename:
@@ -48,46 +54,103 @@ async def upload_logs(file: UploadFile = File(...)):
     if ext not in ("txt", "log", "csv"):
         raise HTTPException(400, "Unsupported file type. Use .txt, .log, or .csv")
 
-    content = (await file.read()).decode("utf-8", errors="replace")
-    if not content.strip():
-        raise HTTPException(400, "File is empty")
+    db = get_db()
+    ingested_at = datetime.utcnow().isoformat()
+    start = datetime.utcnow()
 
-    parsed = parse_logs(content)
-    if not parsed:
+    total_bytes = 0
+    total_lines = 0
+    total_stored = 0
+    total_alerts = 0
+    buffer = ""
+    batch = []
+    all_alerts = []
+    first_batch = True
+
+    while True:
+        chunk = await file.read(READ_CHUNK)
+        if not chunk:
+            break
+
+        total_bytes += len(chunk)
+        if total_bytes > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "File exceeds 1 GB limit")
+
+        buffer += chunk.decode("utf-8", errors="replace")
+        lines = buffer.split("\n")
+        buffer = lines[-1]          # keep incomplete trailing line
+
+        for line in lines[:-1]:
+            total_lines += 1
+            if total_stored >= MAX_STORED_LINES:
+                continue            # count lines but don't store
+            entry = parse_line(line)
+            if not entry:
+                continue
+            entry["_id"] = str(uuid.uuid4())
+            entry["source_file"] = file.filename
+            entry["ingested_at"] = ingested_at
+            batch.append(entry)
+            total_stored += 1
+
+            if len(batch) >= BATCH_SIZE:
+                db["logs"].insert_many(batch)
+                alerts = detect_threats(batch)
+                for a in alerts:
+                    a["_id"] = str(uuid.uuid4())
+                    a["created_at"] = ingested_at
+                if alerts:
+                    db["alerts"].insert_many(alerts)
+                    total_alerts += len(alerts)
+                first_batch = False
+                batch = []
+
+    # flush leftover line in buffer
+    if buffer.strip() and total_stored < MAX_STORED_LINES:
+        entry = parse_line(buffer)
+        if entry:
+            entry["_id"] = str(uuid.uuid4())
+            entry["source_file"] = file.filename
+            entry["ingested_at"] = ingested_at
+            batch.append(entry)
+            total_stored += 1
+
+    # flush remaining batch
+    if batch:
+        db["logs"].insert_many(batch)
+        alerts = detect_threats(batch)
+        for a in alerts:
+            a["_id"] = str(uuid.uuid4())
+            a["created_at"] = ingested_at
+        if alerts:
+            db["alerts"].insert_many(alerts)
+            total_alerts += len(alerts)
+
+    if total_stored == 0:
         raise HTTPException(400, "No parseable log entries found in file")
 
-    db = get_db()
-    for entry in parsed:
-        entry["_id"] = str(uuid.uuid4())
-        entry["source_file"] = file.filename
-        entry["ingested_at"] = datetime.utcnow().isoformat()
-
-    db["logs"].insert_many(parsed)
-
-    alerts = detect_threats(parsed)
-    for alert in alerts:
-        alert["_id"] = str(uuid.uuid4())
-        alert["created_at"] = datetime.utcnow().isoformat()
-    if alerts:
-        db["alerts"].insert_many(alerts)
+    duration_sec = (datetime.utcnow() - start).seconds
+    duration_str = f"{duration_sec // 60}m {duration_sec % 60}s" if duration_sec >= 60 else f"{duration_sec}s"
 
     session_doc = {
         "_id": str(uuid.uuid4()),
         "date": datetime.utcnow().strftime("%Y-%m-%d"),
-        "logs_analyzed": len(parsed),
-        "threats_detected": len(alerts),
+        "logs_analyzed": total_stored,
+        "threats_detected": total_alerts,
         "source_file": file.filename,
         "status": "completed",
-        "created_at": datetime.utcnow().isoformat(),
-        "duration": "—",
+        "created_at": ingested_at,
+        "duration": duration_str,
     }
     db["sessions"].insert_one(session_doc)
 
     return {
         "success": True,
-        "logs_parsed": len(parsed),
-        "threats_detected": len(alerts),
+        "logs_parsed": total_stored,
+        "threats_detected": total_alerts,
         "session_id": session_doc["_id"],
+        "file_size_mb": round(total_bytes / (1024 * 1024), 2),
+        "truncated": total_lines > MAX_STORED_LINES,
     }
 
 
