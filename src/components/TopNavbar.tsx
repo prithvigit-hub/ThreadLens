@@ -58,6 +58,13 @@ export function TopNavbar({ threatDetected = true }: TopNavbarProps) {
         >
           <Settings className="w-4 h-4" />
         </button>
+        <button
+          onClick={signOut}
+          className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Sign out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );
