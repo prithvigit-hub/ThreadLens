@@ -3,6 +3,8 @@ import csv
 import json
 import io
 import uuid
+import threading
+import tempfile
 from datetime import datetime
 from typing import Optional
 
@@ -45,6 +47,98 @@ MAX_STORED_LINES = 10_000_000              # cap stored docs at 10M
 BATCH_SIZE = 10_000                        # insert batch size
 READ_CHUNK = 512 * 1024                    # 512 KB read chunks
 
+# In-memory job tracker: job_id -> status dict
+_upload_jobs: dict = {}
+_jobs_lock = threading.Lock()
+
+
+def _process_file_background(job_id: str, tmp_path: str, filename: str, file_size_bytes: int):
+    """Runs in a background thread: parse + store the temp file, update job status."""
+    ingested_at = datetime.utcnow().isoformat()
+    start = datetime.utcnow()
+    total_lines = 0
+    total_stored = 0
+    total_alerts = 0
+
+    def _update(status, **kwargs):
+        with _jobs_lock:
+            _upload_jobs[job_id].update({"status": status, **kwargs})
+
+    try:
+        db = get_db()
+        batch = []
+
+        with open(tmp_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                total_lines += 1
+                if total_stored < MAX_STORED_LINES:
+                    entry = parse_line(line)
+                    if entry:
+                        entry["_id"] = str(uuid.uuid4())
+                        entry["source_file"] = filename
+                        entry["ingested_at"] = ingested_at
+                        batch.append(entry)
+                        total_stored += 1
+
+                if len(batch) >= BATCH_SIZE:
+                    db["logs"].insert_many(batch)
+                    alerts = detect_threats(batch)
+                    for a in alerts:
+                        a["_id"] = str(uuid.uuid4())
+                        a["created_at"] = ingested_at
+                    if alerts:
+                        db["alerts"].insert_many(alerts)
+                        total_alerts += len(alerts)
+                    batch = []
+                    _update("processing", logs_stored=total_stored)
+
+        # flush remaining
+        if batch:
+            db["logs"].insert_many(batch)
+            alerts = detect_threats(batch)
+            for a in alerts:
+                a["_id"] = str(uuid.uuid4())
+                a["created_at"] = ingested_at
+            if alerts:
+                db["alerts"].insert_many(alerts)
+                total_alerts += len(alerts)
+
+        if total_stored == 0:
+            _update("failed", error="No parseable log entries found in file")
+            return
+
+        duration_sec = int((datetime.utcnow() - start).total_seconds())
+        duration_str = f"{duration_sec // 60}m {duration_sec % 60}s" if duration_sec >= 60 else f"{duration_sec}s"
+
+        session_doc = {
+            "_id": str(uuid.uuid4()),
+            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "logs_analyzed": total_stored,
+            "threats_detected": total_alerts,
+            "source_file": filename,
+            "status": "completed",
+            "created_at": ingested_at,
+            "duration": duration_str,
+        }
+        db["sessions"].insert_one(session_doc)
+
+        _update(
+            "done",
+            logs_parsed=total_stored,
+            threats_detected=total_alerts,
+            session_id=session_doc["_id"],
+            file_size_mb=round(file_size_bytes / (1024 * 1024), 2),
+            truncated=total_lines > MAX_STORED_LINES,
+            logs_stored=total_stored,
+        )
+    except Exception as exc:
+        _update("failed", error=str(exc))
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
 
 @app.post("/api/upload")
 async def upload_logs(file: UploadFile = File(...)):
@@ -54,104 +148,57 @@ async def upload_logs(file: UploadFile = File(...)):
     if ext not in ("txt", "log", "csv"):
         raise HTTPException(400, "Unsupported file type. Use .txt, .log, or .csv")
 
-    db = get_db()
-    ingested_at = datetime.utcnow().isoformat()
-    start = datetime.utcnow()
-
+    # Stream file to a temp file on disk
     total_bytes = 0
-    total_lines = 0
-    total_stored = 0
-    total_alerts = 0
-    buffer = ""
-    batch = []
-    all_alerts = []
-    first_batch = True
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=f".{ext}")
+    try:
+        with os.fdopen(tmp_fd, "wb") as tmp_fh:
+            while True:
+                chunk = await file.read(READ_CHUNK)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_BYTES:
+                    os.unlink(tmp_path)
+                    raise HTTPException(413, "File exceeds 10 GB limit")
+                tmp_fh.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        raise HTTPException(500, f"Failed to receive file: {exc}")
 
-    while True:
-        chunk = await file.read(READ_CHUNK)
-        if not chunk:
-            break
+    # Register job
+    job_id = str(uuid.uuid4())
+    with _jobs_lock:
+        _upload_jobs[job_id] = {
+            "status": "processing",
+            "filename": file.filename,
+            "file_size_bytes": total_bytes,
+            "logs_stored": 0,
+        }
 
-        total_bytes += len(chunk)
-        if total_bytes > MAX_UPLOAD_BYTES:
-            raise HTTPException(413, "File exceeds 1 GB limit")
+    # Kick off background thread
+    thread = threading.Thread(
+        target=_process_file_background,
+        args=(job_id, tmp_path, file.filename, total_bytes),
+        daemon=True,
+    )
+    thread.start()
 
-        buffer += chunk.decode("utf-8", errors="replace")
-        lines = buffer.split("\n")
-        buffer = lines[-1]          # keep incomplete trailing line
+    return {"job_id": job_id, "status": "processing"}
 
-        for line in lines[:-1]:
-            total_lines += 1
-            if total_stored >= MAX_STORED_LINES:
-                continue            # count lines but don't store
-            entry = parse_line(line)
-            if not entry:
-                continue
-            entry["_id"] = str(uuid.uuid4())
-            entry["source_file"] = file.filename
-            entry["ingested_at"] = ingested_at
-            batch.append(entry)
-            total_stored += 1
 
-            if len(batch) >= BATCH_SIZE:
-                db["logs"].insert_many(batch)
-                alerts = detect_threats(batch)
-                for a in alerts:
-                    a["_id"] = str(uuid.uuid4())
-                    a["created_at"] = ingested_at
-                if alerts:
-                    db["alerts"].insert_many(alerts)
-                    total_alerts += len(alerts)
-                first_batch = False
-                batch = []
-
-    # flush leftover line in buffer
-    if buffer.strip() and total_stored < MAX_STORED_LINES:
-        entry = parse_line(buffer)
-        if entry:
-            entry["_id"] = str(uuid.uuid4())
-            entry["source_file"] = file.filename
-            entry["ingested_at"] = ingested_at
-            batch.append(entry)
-            total_stored += 1
-
-    # flush remaining batch
-    if batch:
-        db["logs"].insert_many(batch)
-        alerts = detect_threats(batch)
-        for a in alerts:
-            a["_id"] = str(uuid.uuid4())
-            a["created_at"] = ingested_at
-        if alerts:
-            db["alerts"].insert_many(alerts)
-            total_alerts += len(alerts)
-
-    if total_stored == 0:
-        raise HTTPException(400, "No parseable log entries found in file")
-
-    duration_sec = (datetime.utcnow() - start).seconds
-    duration_str = f"{duration_sec // 60}m {duration_sec % 60}s" if duration_sec >= 60 else f"{duration_sec}s"
-
-    session_doc = {
-        "_id": str(uuid.uuid4()),
-        "date": datetime.utcnow().strftime("%Y-%m-%d"),
-        "logs_analyzed": total_stored,
-        "threats_detected": total_alerts,
-        "source_file": file.filename,
-        "status": "completed",
-        "created_at": ingested_at,
-        "duration": duration_str,
-    }
-    db["sessions"].insert_one(session_doc)
-
-    return {
-        "success": True,
-        "logs_parsed": total_stored,
-        "threats_detected": total_alerts,
-        "session_id": session_doc["_id"],
-        "file_size_mb": round(total_bytes / (1024 * 1024), 2),
-        "truncated": total_lines > MAX_STORED_LINES,
-    }
+@app.get("/api/upload/status/{job_id}")
+def upload_status(job_id: str):
+    with _jobs_lock:
+        job = _upload_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
 
 
 # ─── Logs ──────────────────────────────────────────────────────────────────────
