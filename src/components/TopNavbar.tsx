@@ -10,6 +10,7 @@ interface TopNavbarProps {
 export function TopNavbar({ threatDetected = true }: TopNavbarProps) {
   const navigate = useNavigate();
   const [showUpload, setShowUpload] = useState(false);
+  const { signOut } = useAuth();
 
   return (
     <header className="h-14 border-b border-border bg-card/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0">
