@@ -40,9 +40,9 @@ def health():
 
 # ─── Upload ────────────────────────────────────────────────────────────────────
 
-MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024  # 1 GB
-MAX_STORED_LINES = 1_000_000               # cap stored docs at 1M
-BATCH_SIZE = 5_000                         # insert batch size
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024  # 10 GB
+MAX_STORED_LINES = 10_000_000              # cap stored docs at 10M
+BATCH_SIZE = 10_000                        # insert batch size
 READ_CHUNK = 512 * 1024                    # 512 KB read chunks
 
 
