@@ -62,11 +62,28 @@ export const api = {
       summary: string;
     }>("/api/investigate", { method: "POST", body: JSON.stringify({ logs }) }),
 
-  chat: (message: string, context?: object[]) =>
+  chat: (message: string, context?: object[], session_id?: string) =>
     request<{ success: boolean; response: string; timestamp: string }>("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ message, context }),
+      body: JSON.stringify({ message, context, session_id }),
     }),
+
+  createChatSession: (title: string) =>
+    request<{ session_id: string; title: string; created_at: string }>("/api/chat/sessions", {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    }),
+
+  listChatSessions: () =>
+    request<{ sessions: ChatSession[] }>("/api/chat/sessions"),
+
+  getChatSession: (session_id: string) =>
+    request<{ id: string; title: string; messages: ChatMessage[]; created_at: string }>(
+      `/api/chat/sessions/${session_id}`
+    ),
+
+  deleteChatSession: (session_id: string) =>
+    request<{ success: boolean }>(`/api/chat/sessions/${session_id}`, { method: "DELETE" }),
 
   getSessions: () => request<{ sessions: Session[] }>("/api/sessions"),
 
@@ -104,4 +121,19 @@ export interface Session {
   threatsDetected: number;
   duration: string;
   status: "completed" | "in-progress";
+}
+
+export interface ChatMessage {
+  id?: string;
+  role: "user" | "ai";
+  content: string;
+  timestamp: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
 }

@@ -218,19 +218,104 @@ def investigate(req: InvestigateRequest):
 class ChatRequest(BaseModel):
     message: str
     context: Optional[list] = None
+    session_id: Optional[str] = None
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     try:
         response = chat_with_ai(req.message, req.context)
+        timestamp = datetime.utcnow().strftime("%H:%M")
+
+        # Persist to chat session if session_id provided
+        if req.session_id:
+            try:
+                db = get_db()
+                user_msg = {"role": "user", "content": req.message, "timestamp": timestamp}
+                ai_msg = {"role": "ai", "content": response, "timestamp": timestamp}
+                db["chat_sessions"].update_one(
+                    {"_id": req.session_id},
+                    {"$push": {"messages": {"$each": [user_msg, ai_msg]}},
+                     "$set": {"updated_at": datetime.utcnow().isoformat()}},
+                )
+            except Exception:
+                pass
+
         return {
             "success": True,
             "response": response,
-            "timestamp": datetime.utcnow().strftime("%H:%M"),
+            "timestamp": timestamp,
         }
     except Exception as e:
         raise HTTPException(500, f"AI chat failed: {str(e)}")
+
+
+# ─── Chat Sessions (History) ────────────────────────────────────────────────────
+
+@app.post("/api/chat/sessions")
+def create_chat_session(body: dict):
+    db = get_db()
+    title = body.get("title", "New Chat")[:80]
+    doc = {
+        "_id": str(uuid.uuid4()),
+        "title": title,
+        "messages": [],
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    db["chat_sessions"].insert_one(doc)
+    return {"session_id": doc["_id"], "title": doc["title"], "created_at": doc["created_at"]}
+
+
+@app.get("/api/chat/sessions")
+def list_chat_sessions():
+    try:
+        db = get_db()
+        docs = list(db["chat_sessions"].find(
+            {},
+            {"_id": 1, "title": 1, "created_at": 1, "updated_at": 1, "messages": {"$slice": -1}}
+        ).sort("updated_at", -1).limit(50))
+        sessions = []
+        for d in docs:
+            sessions.append({
+                "id": d["_id"],
+                "title": d.get("title", "Chat"),
+                "created_at": d.get("created_at", ""),
+                "updated_at": d.get("updated_at", ""),
+                "message_count": 0,
+            })
+        return {"sessions": sessions}
+    except Exception:
+        return {"sessions": []}
+
+
+@app.get("/api/chat/sessions/{session_id}")
+def get_chat_session(session_id: str):
+    try:
+        db = get_db()
+        doc = db["chat_sessions"].find_one({"_id": session_id})
+        if not doc:
+            raise HTTPException(404, "Session not found")
+        return {
+            "id": doc["_id"],
+            "title": doc.get("title", "Chat"),
+            "messages": doc.get("messages", []),
+            "created_at": doc.get("created_at", ""),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.delete("/api/chat/sessions/{session_id}")
+def delete_chat_session(session_id: str):
+    try:
+        db = get_db()
+        db["chat_sessions"].delete_one({"_id": session_id})
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 # ─── Sessions ──────────────────────────────────────────────────────────────────
