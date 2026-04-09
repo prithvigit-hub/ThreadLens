@@ -24,7 +24,7 @@ export function LiveLogsPanel() {
           return;
         }
       } catch (_) {}
-      const newLog = toApiLog(generateLogEntry(0));
+      const newLog = toApiLog(generateLogEntry(Date.now() + Math.floor(Math.random() * 10000)));
       setLogs((prev) => [newLog, ...prev.slice(0, 99)]);
     };
 
