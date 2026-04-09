@@ -1,25 +1,34 @@
 import os
 import json
-import google.generativeai as genai
+from groq import Groq
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-_model = None
+_client = None
 
 
-def _get_model():
-    global _model
-    if _model is not None:
-        return _model
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY environment variable is not set")
-    genai.configure(api_key=GEMINI_API_KEY)
-    _model = genai.GenerativeModel("gemini-2.0-flash")
-    return _model
+def _get_client():
+    global _client
+    if _client is not None:
+        return _client
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY environment variable is not set")
+    _client = Groq(api_key=GROQ_API_KEY)
+    return _client
+
+
+def _chat(prompt: str) -> str:
+    client = _get_client()
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content.strip()
 
 
 def analyze_event(event_data: dict) -> dict:
-    model = _get_model()
     prompt = f"""You are a cybersecurity expert. Analyze the following security event:
 
 {json.dumps(event_data, indent=2)}
@@ -33,9 +42,7 @@ Respond ONLY with a JSON object (no markdown, no code blocks) with exactly these
   "recommended_actions": ["<action 1>", "<action 2>", "<action 3>"]
 }}"""
 
-    response = model.generate_content(prompt)
-    text = response.text.strip()
-    # Strip markdown code blocks if present
+    text = _chat(prompt).strip()
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
@@ -45,7 +52,6 @@ Respond ONLY with a JSON object (no markdown, no code blocks) with exactly these
 
 
 def investigate_sequence(logs: list[dict]) -> dict:
-    model = _get_model()
     sample = logs[:50] if len(logs) > 50 else logs
     prompt = f"""You are a cybersecurity forensic expert. Analyze the following sequence of security log events:
 
@@ -63,8 +69,7 @@ Respond ONLY with a JSON object (no markdown, no code blocks) with exactly these
   "summary": "<one paragraph summary>"
 }}"""
 
-    response = model.generate_content(prompt)
-    text = response.text.strip()
+    text = _chat(prompt).strip()
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
@@ -74,7 +79,6 @@ Respond ONLY with a JSON object (no markdown, no code blocks) with exactly these
 
 
 def chat_with_ai(question: str, context: list[dict] = None) -> str:
-    model = _get_model()
     ctx = ""
     if context:
         ctx = f"\n\nRecent security context:\n{json.dumps(context[:10], indent=2)}"
@@ -83,5 +87,4 @@ def chat_with_ai(question: str, context: list[dict] = None) -> str:
 User question: {question}
 
 Provide a clear, actionable, expert response. Be concise but thorough."""
-    response = model.generate_content(prompt)
-    return response.text.strip()
+    return _chat(prompt)
