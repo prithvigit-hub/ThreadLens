@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Upload, Plug, Settings, ShieldCheck, ShieldAlert, LogOut } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { Upload, Plug, Settings, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface TopNavbarProps {
@@ -10,7 +9,6 @@ interface TopNavbarProps {
 export function TopNavbar({ threatDetected = true }: TopNavbarProps) {
   const navigate = useNavigate();
   const [showUpload, setShowUpload] = useState(false);
-  const { signOut } = useAuth();
 
   return (
     <header className="h-14 border-b border-border bg-card/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0">
@@ -57,13 +55,6 @@ export function TopNavbar({ threatDetected = true }: TopNavbarProps) {
           className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
           <Settings className="w-4 h-4" />
-        </button>
-        <button
-          onClick={signOut}
-          className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-          title="Sign out"
-        >
-          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>
