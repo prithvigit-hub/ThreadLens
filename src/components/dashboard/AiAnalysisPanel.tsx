@@ -27,6 +27,7 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage }:
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevSessionId = useRef<string | null | undefined>(undefined);
   const didAutoSend = useRef(false);
+  const internallyCreatedSession = useRef<string | null>(null);
 
   useEffect(() => {
     if (initialMessage && !didAutoSend.current) {
@@ -49,6 +50,13 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage }:
   useEffect(() => {
     if (prevSessionId.current === sessionId) return;
     prevSessionId.current = sessionId;
+
+    // If this session was just created internally by sendToAI, skip re-fetching —
+    // the messages are already in state and the session is empty on the server.
+    if (sessionId && sessionId === internallyCreatedSession.current) {
+      internallyCreatedSession.current = null;
+      return;
+    }
 
     if (!sessionId) {
       setMessages(INITIAL_MESSAGES);
@@ -115,6 +123,8 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage }:
       if (!sid) {
         const session = await api.createChatSession(text.slice(0, 60));
         sid = session.session_id;
+        // Mark this ID so the sessionId prop watcher skips the history re-fetch
+        internallyCreatedSession.current = sid;
         setCurrentSessionId(sid);
         onSessionCreated?.(sid, session.title);
       }
