@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
-import { Settings as SettingsIcon, Bell, Shield, Database, Monitor, User, Server, CheckCircle, XCircle, Loader2, ChevronRight } from "lucide-react";
+import {
+  Settings as SettingsIcon, Bell, Shield, Database, Monitor, User,
+  Server, CheckCircle, XCircle, Loader2, ChevronRight, Eye, EyeOff,
+  KeyRound, AlertCircle, CheckCircle2
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface SystemStatus {
   backend: "ok" | "error" | "loading";
@@ -44,19 +49,194 @@ function StatusDot({ status }: { status: "ok" | "error" | "loading" }) {
   return <XCircle className="w-3.5 h-3.5 text-destructive" />;
 }
 
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const { token } = useAuth();
+  const { toast } = useToast();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNext, setShowNext] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const strength = (() => {
+    if (!next) return 0;
+    let s = 0;
+    if (next.length >= 8) s++;
+    if (/[A-Z]/.test(next)) s++;
+    if (/[0-9]/.test(next)) s++;
+    if (/[^A-Za-z0-9]/.test(next)) s++;
+    return s;
+  })();
+  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strength];
+  const strengthColor = ["", "text-red-400", "text-yellow-400", "text-blue-400", "text-green-400"][strength];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!current) { setError("Current password is required."); return; }
+    if (next.length < 8) { setError("New password must be at least 8 characters."); return; }
+    if (next !== confirm) { setError("New passwords do not match."); return; }
+    if (next === current) { setError("New password must be different from the current one."); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || "Failed to change password.");
+        return;
+      }
+      toast({ title: "Password Updated", description: "Your password has been changed successfully." });
+      onClose();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="glass-panel rounded-2xl p-7 w-full max-w-md space-y-5 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+            <KeyRound className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-foreground">Change Password</h3>
+            <p className="text-xs text-muted-foreground">Choose a strong new password</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Password</label>
+            <div className="relative">
+              <input
+                type={showCurrent ? "text" : "password"}
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+                placeholder="••••••••"
+                className="cyber-input w-full pr-10"
+                data-testid="input-current-password"
+                autoComplete="current-password"
+              />
+              <button type="button" onClick={() => setShowCurrent(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">New Password</label>
+            <div className="relative">
+              <input
+                type={showNext ? "text" : "password"}
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+                placeholder="Min. 8 characters"
+                className="cyber-input w-full pr-10"
+                data-testid="input-new-password"
+                autoComplete="new-password"
+              />
+              <button type="button" onClick={() => setShowNext(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showNext ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {next && (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex gap-1 flex-1">
+                  {[1,2,3,4].map((i) => (
+                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${
+                      i <= strength
+                        ? strength === 1 ? "bg-red-400" : strength === 2 ? "bg-yellow-400" : strength === 3 ? "bg-blue-400" : "bg-green-400"
+                        : "bg-muted"
+                    }`} />
+                  ))}
+                </div>
+                <span className={`text-xs font-medium ${strengthColor}`}>{strengthLabel}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Confirm New Password</label>
+            <div className="relative">
+              <input
+                type={showConfirm ? "text" : "password"}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="••••••••"
+                className="cyber-input w-full pr-10"
+                data-testid="input-confirm-new-password"
+                autoComplete="new-password"
+              />
+              <button type="button" onClick={() => setShowConfirm(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {confirm && next === confirm && (
+              <p className="text-xs text-green-400 flex items-center gap-1 mt-1">
+                <CheckCircle2 className="w-3 h-3" /> Passwords match
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="cyber-btn-outline flex-1 text-sm !py-2.5"
+              data-testid="button-cancel-password"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="cyber-btn flex-1 text-sm !py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+              data-testid="button-save-password"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              {loading ? "Saving..." : "Update Password"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const SettingsPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [status, setStatus] = useState<SystemStatus>({ backend: "loading", db: "loading", ai: "loading" });
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
     api.health()
       .then((data) => {
-        setStatus({
-          backend: "ok",
-          db: data.db_connected ? "ok" : "error",
-          ai: "ok",
-        });
+        setStatus({ backend: "ok", db: data.db_connected ? "ok" : "error", ai: "ok" });
       })
       .catch(() => {
         setStatus({ backend: "error", db: "error", ai: "error" });
@@ -65,6 +245,8 @@ const SettingsPage = () => {
 
   return (
     <Layout>
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+
       <div className="space-y-6 max-w-3xl mx-auto">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -76,7 +258,6 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        {/* Profile shortcut */}
         <button
           onClick={() => navigate("/profile")}
           data-testid="settings-link-profile"
@@ -95,6 +276,35 @@ const SettingsPage = () => {
             View Profile <ChevronRight className="w-3.5 h-3.5" />
           </div>
         </button>
+
+        {/* Security section */}
+        <div className="glass-panel rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <Shield className="w-5 h-5 text-primary" />
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Security</h3>
+              <p className="text-xs text-muted-foreground">Manage your account security settings</p>
+            </div>
+          </div>
+          <div className="pl-8">
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-3">
+                <KeyRound className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Password</p>
+                  <p className="text-xs text-muted-foreground">Last changed: unknown</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowChangePassword(true)}
+                data-testid="button-change-password"
+                className="cyber-btn-outline text-xs !py-1.5 !px-4"
+              >
+                Change
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="glass-panel rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-3">

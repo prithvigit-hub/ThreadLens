@@ -180,6 +180,36 @@ def login(req: LoginRequest):
     }
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+def change_password(req: ChangePasswordRequest, request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(401, "Invalid or expired token")
+    email = payload.get("sub", "")
+    db = get_db()
+    user = db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(404, "User not found")
+    if not verify_password(req.current_password, user.get("password_hash", "")):
+        raise HTTPException(400, "Current password is incorrect")
+    if len(req.new_password) < 8:
+        raise HTTPException(400, "New password must be at least 8 characters")
+    new_hash = hash_password(req.new_password)
+    db["users"].update_one(
+        {"email": email},
+        {"$set": {"password_hash": new_hash, "password_changed_at": datetime.utcnow().isoformat()}}
+    )
+    return {"success": True, "message": "Password updated successfully"}
+
+
 @app.get("/api/auth/me")
 def get_me(request: Request):
     token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
