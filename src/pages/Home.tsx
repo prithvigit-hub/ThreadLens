@@ -115,8 +115,9 @@ const Home = () => {
   const handleImageAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" });
+    const isImage = file.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff|tif)$/i.test(file.name);
+    if (!isImage) {
+      toast({ title: "Invalid file", description: "Please select an image file (JPG, PNG, GIF, WebP, etc.).", variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -131,8 +132,8 @@ const Home = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
-    if (![".csv", ".json", ".txt"].includes(ext)) {
-      toast({ title: "Unsupported file", description: "Only .csv, .json, and .txt files are supported.", variant: "destructive" });
+    if (![".csv", ".json", ".txt", ".log"].includes(ext)) {
+      toast({ title: "Unsupported file", description: "Only .csv, .json, .txt, and .log files are supported.", variant: "destructive" });
       return;
     }
     if (file.size > 500 * 1024) {
@@ -376,7 +377,7 @@ const Home = () => {
             </div>
 
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageAttach} data-testid="input-home-image-upload" />
-            <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" className="hidden" onChange={handleFileAttach} data-testid="input-home-file-upload" />
+            <input ref={fileInputRef} type="file" accept=".csv,.json,.txt,.log" className="hidden" onChange={handleFileAttach} data-testid="input-home-file-upload" />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <ActionCard icon={Upload} title="Upload Logs" description="Parse and analyze log files up to 10 GB with threat detection" color="primary" onClick={() => navigate("/analyze")} testId="card-upload-logs" />

@@ -102,8 +102,9 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
   const handleImageAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" });
+    const isImage = file.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff|tif)$/i.test(file.name);
+    if (!isImage) {
+      toast({ title: "Invalid file", description: "Please select an image file (JPG, PNG, GIF, WebP, etc.).", variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -121,10 +122,10 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const allowed = [".csv", ".json", ".txt"];
+    const allowed = [".csv", ".json", ".txt", ".log"];
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
     if (!allowed.includes(ext)) {
-      toast({ title: "Unsupported file", description: "Only .csv, .json, and .txt files are supported.", variant: "destructive" });
+      toast({ title: "Unsupported file", description: "Only .csv, .json, .txt, and .log files are supported.", variant: "destructive" });
       return;
     }
     if (file.size > 500 * 1024) {
@@ -360,7 +361,7 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.json,.txt"
+            accept=".csv,.json,.txt,.log"
             className="hidden"
             onChange={handleFileAttach}
             data-testid="input-file-upload"
