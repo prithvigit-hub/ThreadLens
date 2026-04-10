@@ -1,8 +1,31 @@
 const BASE = "";
 
+function getUserEmail(): string {
+  try {
+    const stored = localStorage.getItem("forensic_auth_user");
+    if (stored) {
+      const user = JSON.parse(stored);
+      return user.email || "";
+    }
+  } catch {}
+  return "";
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const email = getUserEmail();
+  return {
+    ...(email ? { "X-User-Email": email } : {}),
+    ...extra,
+  };
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...options?.headers,
+    },
     ...options,
   });
   if (!res.ok) {
@@ -36,11 +59,21 @@ export const api = {
   uploadLogs: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return request<{ success: boolean; logs_parsed: number; threats_detected: number; session_id: string }>(
+    return request<{ success: boolean; job_id: string }>(
       "/api/upload",
-      { method: "POST", body: form, headers: {} }
+      { method: "POST", body: form, headers: authHeaders() }
     );
   },
+
+  getUploadStatus: (jobId: string) =>
+    request<{
+      status: string;
+      logs_stored?: number;
+      threats_detected?: number;
+      file_size_mb?: number;
+      truncated?: boolean;
+      error?: string;
+    }>(`/api/upload/status/${jobId}`),
 
   analyze: (event: object) =>
     request<{
@@ -88,7 +121,9 @@ export const api = {
   getSessions: () => request<{ sessions: Session[] }>("/api/sessions"),
 
   exportData: (format: "json" | "csv", collection: "logs" | "alerts") =>
-    fetch(`/api/export?format=${format}&collection=${collection}`),
+    fetch(`/api/export?format=${format}&collection=${collection}`, {
+      headers: authHeaders(),
+    }),
 };
 
 export interface LogEntry {

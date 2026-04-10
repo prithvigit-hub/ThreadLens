@@ -8,10 +8,16 @@ import tempfile
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Query, HTTPException
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+
+
+def get_owner(request: Request) -> str:
+    """Extract the user's email from the X-User-Email header to scope DB queries."""
+    email = request.headers.get("X-User-Email", "").strip().lower()
+    return email if email else "anonymous"
 
 from database import get_db, ping_db
 from parser import parse_logs, parse_line
@@ -52,7 +58,7 @@ _upload_jobs: dict = {}
 _jobs_lock = threading.Lock()
 
 
-def _process_file_background(job_id: str, tmp_path: str, filename: str, file_size_bytes: int):
+def _process_file_background(job_id: str, tmp_path: str, filename: str, file_size_bytes: int, owner: str = "anonymous"):
     """Runs in a background thread: parse + store the temp file, update job status."""
     ingested_at = datetime.utcnow().isoformat()
     start = datetime.utcnow()
@@ -77,6 +83,7 @@ def _process_file_background(job_id: str, tmp_path: str, filename: str, file_siz
                         entry["_id"] = str(uuid.uuid4())
                         entry["source_file"] = filename
                         entry["ingested_at"] = ingested_at
+                        entry["owner"] = owner
                         batch.append(entry)
                         total_stored += 1
 
@@ -86,6 +93,7 @@ def _process_file_background(job_id: str, tmp_path: str, filename: str, file_siz
                     for a in alerts:
                         a["_id"] = str(uuid.uuid4())
                         a["created_at"] = ingested_at
+                        a["owner"] = owner
                     if alerts:
                         db["alerts"].insert_many(alerts)
                         total_alerts += len(alerts)
@@ -99,6 +107,7 @@ def _process_file_background(job_id: str, tmp_path: str, filename: str, file_siz
             for a in alerts:
                 a["_id"] = str(uuid.uuid4())
                 a["created_at"] = ingested_at
+                a["owner"] = owner
             if alerts:
                 db["alerts"].insert_many(alerts)
                 total_alerts += len(alerts)
@@ -119,6 +128,7 @@ def _process_file_background(job_id: str, tmp_path: str, filename: str, file_siz
             "status": "completed",
             "created_at": ingested_at,
             "duration": duration_str,
+            "owner": owner,
         }
         db["sessions"].insert_one(session_doc)
 
@@ -141,7 +151,8 @@ def _process_file_background(job_id: str, tmp_path: str, filename: str, file_siz
 
 
 @app.post("/api/upload")
-async def upload_logs(file: UploadFile = File(...)):
+async def upload_logs(request: Request, file: UploadFile = File(...)):
+    owner = get_owner(request)
     if not file.filename:
         raise HTTPException(400, "No file provided")
     ext = file.filename.rsplit(".", 1)[-1].lower()
