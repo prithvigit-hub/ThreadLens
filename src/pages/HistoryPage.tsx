@@ -1,22 +1,17 @@
 import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
-import { mockSessions } from "@/data/mockData";
 import { api, type Session } from "@/lib/api";
 import { History as HistoryIcon, ChevronRight, AlertTriangle, FileText } from "lucide-react";
 
 const HistoryPage = () => {
-  const [sessions, setSessions] = useState<Session[]>(
-    mockSessions.map((s) => ({
-      ...s,
-      logsAnalyzed: s.logsAnalyzed,
-      threatsDetected: s.threatsDetected,
-    }))
-  );
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.getSessions()
       .then((data) => { if (data.sessions?.length) setSessions(data.sessions); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -28,10 +23,23 @@ const HistoryPage = () => {
           </div>
           <div>
             <h2 className="text-xl font-bold text-foreground">Session History</h2>
-            <p className="text-sm text-muted-foreground">{sessions.length} previous sessions</p>
+            <p className="text-sm text-muted-foreground">
+              {loading ? "Loading…" : `${sessions.length} previous session${sessions.length !== 1 ? "s" : ""}`}
+            </p>
           </div>
         </div>
 
+        {loading ? (
+          <div className="glass-panel rounded-xl p-10 flex items-center justify-center">
+            <p className="text-sm text-muted-foreground animate-pulse">Loading sessions…</p>
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="glass-panel rounded-xl p-10 flex flex-col items-center justify-center gap-3 text-center">
+            <HistoryIcon className="w-10 h-10 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground/60">No sessions yet</p>
+            <p className="text-xs text-muted-foreground/40">Your analysis history will appear here after you upload log files</p>
+          </div>
+        ) : (
         <div className="space-y-3">
           {sessions.map((session, i) => (
             <div
@@ -69,6 +77,7 @@ const HistoryPage = () => {
             </div>
           ))}
         </div>
+        )}
       </div>
     </Layout>
   );

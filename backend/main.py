@@ -617,6 +617,16 @@ def demo_simulate():
     }
 
 
+@app.delete("/api/admin/clear-all-data")
+def clear_all_data():
+    db = get_db()
+    results = {}
+    for col in ["logs", "alerts", "sessions", "chat_sessions"]:
+        r = db[col].delete_many({})
+        results[col] = r.deleted_count
+    return {"success": True, "deleted": results}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("BACKEND_PORT", "8000"))

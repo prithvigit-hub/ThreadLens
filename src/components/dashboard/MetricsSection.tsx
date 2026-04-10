@@ -40,58 +40,65 @@ function MetricCard({ title, value, icon: Icon, trend, variant = "default" }: Me
 }
 
 export function MetricsSection() {
-  const [stats, setStats] = useState({
-    logs_analyzed: 15420,
-    threats_detected: 8,
-    unresolved_alerts: 3,
-    risk_level: "High",
-    last_incident: "14:23",
-  });
+  const [stats, setStats] = useState<{
+    logs_analyzed: number;
+    threats_detected: number;
+    unresolved_alerts: number;
+    risk_level: string;
+    last_incident: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.stats()
       .then((data) => {
         setStats({
-          logs_analyzed: data.logs_analyzed || 15420,
-          threats_detected: data.threats_detected || 8,
-          unresolved_alerts: data.unresolved_alerts || 3,
-          risk_level: data.risk_level || "High",
+          logs_analyzed: data.logs_analyzed ?? 0,
+          threats_detected: data.threats_detected ?? 0,
+          unresolved_alerts: data.unresolved_alerts ?? 0,
+          risk_level: data.risk_level ?? "Low",
           last_incident: data.last_incident
             ? data.last_incident.toString().slice(11, 16)
-            : "14:23",
+            : null,
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        setStats({ logs_analyzed: 0, threats_detected: 0, unresolved_alerts: 0, risk_level: "Low", last_incident: null });
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  const s = stats ?? { logs_analyzed: 0, threats_detected: 0, unresolved_alerts: 0, risk_level: "Low", last_incident: null };
+  const isEmpty = !loading && s.logs_analyzed === 0 && s.threats_detected === 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <MetricCard
         title="Logs Analyzed"
-        value={stats.logs_analyzed.toLocaleString()}
+        value={loading ? "—" : s.logs_analyzed.toLocaleString()}
         icon={Activity}
-        trend="+2,340 today"
+        trend={isEmpty ? "No logs yet" : undefined}
       />
       <MetricCard
         title="Threats Detected"
-        value={stats.threats_detected}
+        value={loading ? "—" : s.threats_detected}
         icon={AlertTriangle}
-        trend={`${stats.unresolved_alerts} unresolved`}
-        variant="danger"
+        trend={isEmpty ? "No threats detected" : `${s.unresolved_alerts} unresolved`}
+        variant={s.threats_detected > 0 ? "danger" : "default"}
       />
       <MetricCard
         title="Risk Level"
-        value={stats.risk_level}
+        value={loading ? "—" : s.risk_level}
         icon={Shield}
-        trend="Escalated 2h ago"
-        variant="warning"
+        trend={isEmpty ? "Nothing ingested yet" : undefined}
+        variant={s.risk_level === "High" ? "warning" : "default"}
       />
       <MetricCard
         title="Last Incident"
-        value={stats.last_incident}
+        value={loading ? "—" : (s.last_incident ?? "None")}
         icon={Clock}
-        trend="42 min ago"
-        variant="safe"
+        trend={isEmpty ? "No incidents recorded" : undefined}
+        variant={s.last_incident ? "safe" : "default"}
       />
     </div>
   );
