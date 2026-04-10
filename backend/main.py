@@ -425,7 +425,15 @@ def chat(req: ChatRequest):
             "timestamp": timestamp,
         }
     except Exception as e:
-        raise HTTPException(500, f"AI chat failed: {str(e)}")
+        err_str = str(e)
+        if "rate_limit_exceeded" in err_str or "Rate limit" in err_str or "429" in err_str:
+            import re
+            wait_match = re.search(r'Please try again in ([^\.]+)', err_str)
+            wait_info = f" Please try again in {wait_match.group(1)}." if wait_match else ""
+            raise HTTPException(429, f"AI rate limit reached.{wait_info}")
+        if "GROQ_API_KEY" in err_str:
+            raise HTTPException(503, "AI service is not configured. Please set the GROQ_API_KEY.")
+        raise HTTPException(500, f"AI chat failed: {err_str}")
 
 
 # ─── Chat Sessions (History) ────────────────────────────────────────────────────

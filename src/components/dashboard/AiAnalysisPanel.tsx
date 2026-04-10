@@ -221,11 +221,22 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
 
       const aiMsg: ChatMessage = { id: `ai-${Date.now()}`, role: "ai", content: data.response, timestamp: data.timestamp };
       setMessages((prev) => [...prev, aiMsg]);
-    } catch {
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : String(err);
+      let userMessage = "Sorry, something went wrong. Please try again.";
+      if (raw.includes("rate limit") || raw.includes("Rate limit") || raw.includes("429")) {
+        const waitMatch = raw.match(/Please try again in ([^.]+)/);
+        const waitInfo = waitMatch ? ` Please try again in ${waitMatch[1]}.` : " Please wait a moment before trying again.";
+        userMessage = `⚠️ The AI is temporarily unavailable due to a usage rate limit.${waitInfo}`;
+      } else if (raw.includes("GROQ_API_KEY") || raw.includes("not configured")) {
+        userMessage = "The AI service is not configured. Please ensure the GROQ_API_KEY is set correctly.";
+      } else if (raw && raw !== "Internal Server Error") {
+        userMessage = `Sorry, the AI encountered an error: ${raw}`;
+      }
       const errMsg: ChatMessage = {
         id: `ai-err-${Date.now()}`,
         role: "ai",
-        content: "Sorry, the AI service is unavailable right now. Please ensure the GROQ_API_KEY is set correctly.",
+        content: userMessage,
         timestamp: ts,
       };
       setMessages((prev) => [...prev, errMsg]);
