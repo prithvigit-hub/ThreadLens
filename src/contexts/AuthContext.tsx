@@ -1,47 +1,73 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-interface User {
+export interface User {
   email: string;
   name: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => boolean;
+  token: string | null;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean }>;
   logout: () => void;
+  setAuth: (token: string, user: User) => void;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const stored = localStorage.getItem("forensic_auth_user");
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  const login = (email: string, password: string): boolean => {
-    if (!email.trim() || !password.trim()) return false;
-    const newUser: User = {
-      email: email.trim(),
-      name: email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    };
+  useEffect(() => {
+    try {
+      const storedToken = localStorage.getItem("forensic_token");
+      const storedUser = localStorage.getItem("forensic_auth_user");
+      if (storedToken && storedUser) {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      }
+    } catch {}
+  }, []);
+
+  const setAuth = (newToken: string, newUser: User) => {
+    setToken(newToken);
     setUser(newUser);
+    localStorage.setItem("forensic_token", newToken);
     localStorage.setItem("forensic_auth_user", JSON.stringify(newUser));
-    return true;
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 403) {
+          return { success: false, error: data.detail, needsVerification: true };
+        }
+        return { success: false, error: data.detail || "Login failed" };
+      }
+      setAuth(data.token, data.user);
+      return { success: true };
+    } catch {
+      return { success: false, error: "Network error. Please try again." };
+    }
   };
 
   const logout = () => {
     setUser(null);
+    setToken(null);
+    localStorage.removeItem("forensic_token");
     localStorage.removeItem("forensic_auth_user");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, token, login, logout, setAuth, isAuthenticated: !!user && !!token }}>
       {children}
     </AuthContext.Provider>
   );

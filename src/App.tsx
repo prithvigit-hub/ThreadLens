@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import CyberBackground from "@/components/CyberBackground";
 import Login from "./pages/Login.tsx";
+import Signup from "./pages/Signup.tsx";
+import VerifyEmail from "./pages/VerifyEmail.tsx";
 import Home from "./pages/Home.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import LiveMonitoring from "./pages/LiveMonitoring.tsx";
@@ -30,6 +32,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/signup" element={isAuthenticated ? <Navigate to="/" replace /> : <Signup />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
       <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/monitoring" element={<PrivateRoute><LiveMonitoring /></PrivateRoute>} />

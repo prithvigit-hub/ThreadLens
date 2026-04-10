@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Shield, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
@@ -19,20 +19,16 @@ const Login = () => {
     if (!password.trim()) { setError("Password is required."); return; }
 
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    const ok = login(email, password);
+    const result = await login(email.trim(), password);
     setLoading(false);
-    if (ok) {
-      navigate("/", { replace: true });
-    } else {
-      setError("Invalid credentials. Please try again.");
-    }
-  };
 
-  const fillDemo = () => {
-    setEmail("analyst@forensics.io");
-    setPassword("demo123");
-    setError("");
+    if (result.success) {
+      navigate("/", { replace: true });
+    } else if (result.needsVerification) {
+      navigate("/verify-email", { state: { email: email.trim() } });
+    } else {
+      setError(result.error || "Invalid credentials. Please try again.");
+    }
   };
 
   return (
@@ -61,7 +57,7 @@ const Login = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="analyst@forensics.io"
+                placeholder="you@example.com"
                 className="cyber-input w-full"
                 data-testid="input-email"
                 autoComplete="email"
@@ -106,23 +102,18 @@ const Login = () => {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-3 text-muted-foreground">or</span>
+              <span className="bg-card px-3 text-muted-foreground">don't have an account?</span>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={fillDemo}
-            data-testid="button-demo-login"
-            className="cyber-btn-outline w-full text-sm !py-2.5"
+          <Link
+            to="/signup"
+            data-testid="link-signup"
+            className="cyber-btn-outline w-full text-sm !py-2.5 flex items-center justify-center"
           >
-            Use Demo Credentials
-          </button>
+            Create Account
+          </Link>
         </div>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Demo: any email + any password · Hackathon build
-        </p>
       </div>
     </div>
   );

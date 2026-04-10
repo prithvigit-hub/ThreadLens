@@ -23,6 +23,10 @@ from database import get_db, ping_db
 from parser import parse_logs, parse_line
 from detector import detect_threats
 from llm import analyze_event, investigate_sequence, chat_with_ai
+from auth import (
+    hash_password, verify_password, create_access_token,
+    decode_token, generate_otp, send_verification_email
+)
 
 app = FastAPI(title="LLM Forensic Investigator API", version="1.0.0")
 
@@ -32,6 +36,164 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ─── Auth ──────────────────────────────────────────────────────────────────────
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+
+
+class VerifyEmailRequest(BaseModel):
+    email: str
+    otp: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class ResendOtpRequest(BaseModel):
+    email: str
+
+
+def _get_auth_user(email: str):
+    db = get_db()
+    return db["users"].find_one({"email": email.strip().lower()})
+
+
+@app.post("/api/auth/signup")
+def signup(req: SignupRequest):
+    email = req.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Invalid email address")
+    if not req.password or len(req.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
+
+    db = get_db()
+    existing = db["users"].find_one({"email": email})
+    if existing and existing.get("verified"):
+        raise HTTPException(409, "An account with this email already exists")
+
+    otp = generate_otp()
+    otp_expires = (datetime.utcnow() + __import__('datetime').timedelta(minutes=10)).isoformat()
+    name = req.name or email.split("@")[0].replace(".", " ").replace("_", " ").title()
+
+    user_doc = {
+        "_id": str(uuid.uuid4()),
+        "email": email,
+        "name": name,
+        "password_hash": hash_password(req.password),
+        "verified": False,
+        "otp": otp,
+        "otp_expires": otp_expires,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    if existing and not existing.get("verified"):
+        db["users"].update_one(
+            {"email": email},
+            {"$set": {
+                "password_hash": hash_password(req.password),
+                "name": name,
+                "otp": otp,
+                "otp_expires": otp_expires,
+            }}
+        )
+    else:
+        db["users"].insert_one(user_doc)
+
+    email_sent = send_verification_email(email, otp, name)
+    return {
+        "success": True,
+        "message": "Verification code sent to your email" if email_sent else "Account created. Check server logs for OTP (SMTP not configured).",
+        "email_sent": email_sent,
+    }
+
+
+@app.post("/api/auth/verify-email")
+def verify_email(req: VerifyEmailRequest):
+    email = req.email.strip().lower()
+    db = get_db()
+    user = db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(404, "No account found for this email")
+    if user.get("verified"):
+        raise HTTPException(400, "Email is already verified")
+
+    otp_expires = user.get("otp_expires", "")
+    if otp_expires and datetime.utcnow().isoformat() > otp_expires:
+        raise HTTPException(400, "Verification code has expired. Please request a new one.")
+
+    if user.get("otp") != req.otp.strip():
+        raise HTTPException(400, "Invalid verification code")
+
+    db["users"].update_one({"email": email}, {"$set": {"verified": True}, "$unset": {"otp": "", "otp_expires": ""}})
+
+    token = create_access_token({"sub": email, "name": user.get("name", "")})
+    return {
+        "success": True,
+        "token": token,
+        "user": {"email": email, "name": user.get("name", "")},
+    }
+
+
+@app.post("/api/auth/resend-otp")
+def resend_otp(req: ResendOtpRequest):
+    email = req.email.strip().lower()
+    db = get_db()
+    user = db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(404, "No account found for this email")
+    if user.get("verified"):
+        raise HTTPException(400, "Email is already verified")
+
+    otp = generate_otp()
+    otp_expires = (datetime.utcnow() + __import__('datetime').timedelta(minutes=10)).isoformat()
+    db["users"].update_one({"email": email}, {"$set": {"otp": otp, "otp_expires": otp_expires}})
+
+    email_sent = send_verification_email(email, otp, user.get("name", ""))
+    return {"success": True, "email_sent": email_sent}
+
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest):
+    email = req.email.strip().lower()
+    db = get_db()
+    user = db["users"].find_one({"email": email})
+
+    if not user:
+        raise HTTPException(401, "Invalid email or password")
+    if not user.get("verified"):
+        raise HTTPException(403, "Please verify your email before logging in")
+    if not verify_password(req.password, user.get("password_hash", "")):
+        raise HTTPException(401, "Invalid email or password")
+
+    token = create_access_token({"sub": email, "name": user.get("name", "")})
+    return {
+        "success": True,
+        "token": token,
+        "user": {"email": email, "name": user.get("name", "")},
+    }
+
+
+@app.get("/api/auth/me")
+def get_me(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(401, "Invalid or expired token")
+    email = payload.get("sub", "")
+    db = get_db()
+    user = db["users"].find_one({"email": email}, {"_id": 0, "email": 1, "name": 1, "verified": 1})
+    if not user:
+        raise HTTPException(404, "User not found")
+    return {"user": user}
 
 
 # ─── Health ────────────────────────────────────────────────────────────────────

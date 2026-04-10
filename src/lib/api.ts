@@ -11,10 +11,18 @@ function getUserEmail(): string {
   return "";
 }
 
+function getToken(): string {
+  try {
+    return localStorage.getItem("forensic_token") || "";
+  } catch { return ""; }
+}
+
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const email = getUserEmail();
+  const token = getToken();
   return {
     ...(email ? { "X-User-Email": email } : {}),
+    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
     ...extra,
   };
 }
