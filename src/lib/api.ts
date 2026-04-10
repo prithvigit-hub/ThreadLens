@@ -124,6 +124,15 @@ export const api = {
     fetch(`/api/export?format=${format}&collection=${collection}`, {
       headers: authHeaders(),
     }),
+
+  blockIp: (ip: string, alertId?: string, reason?: string) =>
+    request<{ success: boolean; already_blocked: boolean; message: string }>("/api/block-ip", {
+      method: "POST",
+      body: JSON.stringify({ ip, alert_id: alertId, reason }),
+    }),
+
+  getBlockedIps: () =>
+    request<{ blocked_ips: { ip: string; blocked_at: string; reason: string }[] }>("/api/blocked-ips"),
 };
 
 export interface LogEntry {

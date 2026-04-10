@@ -575,6 +575,47 @@ def export(format: str = Query("json", enum=["json", "csv"]), collection: str = 
         )
 
 
+# ─── Block IP ──────────────────────────────────────────────────────────────────
+
+class BlockIpRequest(BaseModel):
+    ip: str
+    alert_id: Optional[str] = None
+    reason: Optional[str] = None
+
+
+@app.post("/api/block-ip")
+def block_ip(req: BlockIpRequest, request: Request):
+    owner = get_owner(request)
+    try:
+        db = get_db()
+        existing = db["blocked_ips"].find_one({"ip": req.ip})
+        if existing:
+            return {"success": True, "already_blocked": True, "message": f"IP {req.ip} is already blocked"}
+        doc = {
+            "_id": str(uuid.uuid4()),
+            "ip": req.ip,
+            "blocked_at": datetime.utcnow().isoformat(),
+            "reason": req.reason or "Manual block from dashboard",
+            "owner": owner,
+        }
+        db["blocked_ips"].insert_one(doc)
+        if req.alert_id:
+            db["alerts"].update_one({"_id": req.alert_id}, {"$set": {"resolved": True}})
+        return {"success": True, "already_blocked": False, "message": f"IP {req.ip} has been blocked successfully"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to block IP: {str(e)}")
+
+
+@app.get("/api/blocked-ips")
+def get_blocked_ips():
+    try:
+        db = get_db()
+        docs = list(db["blocked_ips"].find({}, {"_id": 0}).sort("blocked_at", -1).limit(100))
+        return {"blocked_ips": docs}
+    except Exception:
+        return {"blocked_ips": []}
+
+
 # ─── Stats ─────────────────────────────────────────────────────────────────────
 
 @app.get("/api/stats")

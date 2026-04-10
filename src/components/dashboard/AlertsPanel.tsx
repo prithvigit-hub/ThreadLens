@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type Alert } from "@/lib/api";
-import { ChevronRight, AlertTriangle, ShieldCheck } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { ChevronRight, AlertTriangle, ShieldCheck, ShieldOff, Search, Loader2 } from "lucide-react";
 
 function RiskBadge({ risk }: { risk: Alert["risk"] }) {
   const styles = {
@@ -16,9 +18,13 @@ function RiskBadge({ risk }: { risk: Alert["risk"] }) {
 }
 
 export function AlertsPanel() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [blockingIp, setBlockingIp] = useState(false);
+  const [investigating, setInvestigating] = useState(false);
 
   useEffect(() => {
     api.getAlerts()
@@ -28,6 +34,44 @@ export function AlertsPanel() {
   }, []);
 
   const unresolved = alerts.filter((a) => !a.resolved).length;
+
+  const handleBlockIp = async (alert: Alert) => {
+    if (!alert.source || blockingIp) return;
+    setBlockingIp(true);
+    try {
+      const result = await api.blockIp(alert.source, alert.id, `Blocked due to alert: ${alert.title}`);
+      if (result.already_blocked) {
+        toast({
+          title: "Already Blocked",
+          description: `IP ${alert.source} is already in the block list.`,
+        });
+      } else {
+        toast({
+          title: "IP Blocked",
+          description: `${alert.source} has been blocked and the alert marked as resolved.`,
+        });
+        setAlerts((prev) =>
+          prev.map((a) => a.id === alert.id ? { ...a, resolved: true } : a)
+        );
+        setSelectedAlert((prev) => prev?.id === alert.id ? { ...prev, resolved: true } : prev);
+      }
+    } catch {
+      toast({
+        title: "Block Failed",
+        description: "Could not block the IP. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBlockingIp(false);
+    }
+  };
+
+  const handleInvestigate = async (alert: Alert) => {
+    if (investigating) return;
+    setInvestigating(true);
+    const message = `Investigate this security alert in detail:\n\nAlert: ${alert.title}\nRisk Level: ${alert.risk.toUpperCase()}\nSource IP: ${alert.source}\nDetected At: ${alert.timestamp}\nDescription: ${alert.description}\n\nPlease analyze what happened, the potential impact, and recommend specific remediation steps.`;
+    navigate("/ask-ai", { state: { initialMessage: message } });
+  };
 
   return (
     <div className="glass-panel rounded-xl flex flex-col h-[400px] animate-fade-in">
@@ -46,6 +90,7 @@ export function AlertsPanel() {
           <button
             onClick={() => setSelectedAlert(null)}
             className="text-xs text-primary hover:underline mb-3 flex items-center gap-1"
+            data-testid="button-back-to-alerts"
           >
             ← Back to alerts
           </button>
@@ -65,9 +110,39 @@ export function AlertsPanel() {
                 <p className="text-foreground font-mono mt-1">{selectedAlert.timestamp}</p>
               </div>
             </div>
+            {selectedAlert.resolved && (
+              <div className="flex items-center gap-1.5 text-xs text-green-400 bg-green-400/10 rounded-lg px-3 py-2">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                This alert has been resolved
+              </div>
+            )}
             <div className="flex gap-2 mt-2">
-              <button className="cyber-btn text-xs !py-1.5">Block IP</button>
-              <button className="cyber-btn-outline text-xs !py-1.5">Investigate</button>
+              <button
+                data-testid="button-block-ip"
+                onClick={() => handleBlockIp(selectedAlert)}
+                disabled={blockingIp || selectedAlert.resolved}
+                className="cyber-btn text-xs !py-1.5 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {blockingIp ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <ShieldOff className="w-3 h-3" />
+                )}
+                {blockingIp ? "Blocking..." : selectedAlert.resolved ? "Blocked" : "Block IP"}
+              </button>
+              <button
+                data-testid="button-investigate"
+                onClick={() => handleInvestigate(selectedAlert)}
+                disabled={investigating}
+                className="cyber-btn-outline text-xs !py-1.5 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {investigating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Search className="w-3 h-3" />
+                )}
+                Investigate
+              </button>
             </div>
           </div>
         </div>
@@ -86,6 +161,7 @@ export function AlertsPanel() {
           {alerts.map((alert) => (
             <button
               key={alert.id}
+              data-testid={`alert-item-${alert.id}`}
               onClick={() => setSelectedAlert(alert)}
               className={`w-full text-left px-4 py-3 border-b border-border/50 flex items-center gap-3 hover:bg-muted/30 transition-colors ${
                 alert.resolved ? "opacity-50" : ""
