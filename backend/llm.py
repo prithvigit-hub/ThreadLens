@@ -6,7 +6,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 _client = None
 
-SYSTEM_PROMPT = (
+BASE_SYSTEM_PROMPT = (
     "You are an AI cybersecurity analyst assistant integrated into an LLM-Powered "
     "Log Forensic Investigator dashboard. You ONLY answer questions strictly related to: "
     "cybersecurity, log analysis, threat detection, incident response, network security, "
@@ -21,6 +21,74 @@ SYSTEM_PROMPT = (
 )
 
 
+def _build_system_prompt(db_context: dict | None = None) -> str:
+    """Build a system prompt that includes real database context when available."""
+    if not db_context:
+        return BASE_SYSTEM_PROMPT
+
+    stats = db_context.get("stats", {})
+    alerts = db_context.get("alerts", [])
+    logs = db_context.get("logs", [])
+    sessions = db_context.get("sessions", [])
+
+    context_lines = [BASE_SYSTEM_PROMPT, "\n\n=== LIVE SYSTEM DATA (use this to answer user questions) ===\n"]
+
+    # Stats block
+    context_lines.append(
+        f"CURRENT SYSTEM STATS:\n"
+        f"  - Total logs analyzed: {stats.get('logs_analyzed', 0):,}\n"
+        f"  - Threats detected: {stats.get('threats_detected', 0)}\n"
+        f"  - Unresolved alerts: {stats.get('unresolved_alerts', 0)}\n"
+        f"  - Overall risk level: {stats.get('risk_level', 'Unknown')}\n"
+        f"  - Last incident timestamp: {stats.get('last_incident') or 'None'}\n"
+    )
+
+    # Sessions block
+    if sessions:
+        context_lines.append("\nRECENT UPLOAD SESSIONS:")
+        for s in sessions[:5]:
+            context_lines.append(
+                f"  - File: {s.get('source_file', 'unknown')} | Date: {s.get('date', '')} | "
+                f"Logs: {s.get('logsAnalyzed', s.get('logs_analyzed', 0)):,} | "
+                f"Threats: {s.get('threatsDetected', s.get('threats_detected', 0))}"
+            )
+
+    # Alerts block
+    if alerts:
+        context_lines.append(f"\nACTIVE ALERTS ({len(alerts)} shown, sorted by severity):")
+        for a in alerts[:20]:
+            context_lines.append(
+                f"  [{a.get('risk', 'unknown').upper()}] {a.get('title', a.get('type', 'Alert'))} "
+                f"| IP: {a.get('source', a.get('ip', 'N/A'))} "
+                f"| Time: {a.get('timestamp', 'N/A')} "
+                f"| Resolved: {a.get('resolved', False)}"
+            )
+    else:
+        context_lines.append("\nACTIVE ALERTS: None detected yet.")
+
+    # Logs block (most recent suspicious ones first)
+    if logs:
+        suspicious = [l for l in logs if l.get("suspicious")]
+        normal = [l for l in logs if not l.get("suspicious")]
+        shown_logs = suspicious[:15] + normal[:5]
+        context_lines.append(f"\nRECENT LOG ENTRIES ({len(shown_logs)} shown, suspicious first):")
+        for l in shown_logs:
+            flag = "⚠ SUSPICIOUS" if l.get("suspicious") else "  normal"
+            context_lines.append(
+                f"  {flag} | {l.get('timestamp', '')} | IP: {l.get('ip', 'N/A')} | "
+                f"Event: {l.get('event', l.get('raw', '')[:120])} | "
+                f"Risk: {l.get('risk', 'N/A')} | Status: {l.get('status', 'N/A')}"
+            )
+
+    context_lines.append(
+        "\nWhen the user asks about logs, threats, alerts, or their security posture, "
+        "always reference the data above. Give specific numbers, IPs, timestamps, and event names from this data. "
+        "Do NOT say you don't have access to the data — this data is your live context."
+    )
+
+    return "\n".join(context_lines)
+
+
 def _get_client():
     global _client
     if _client is not None:
@@ -31,25 +99,27 @@ def _get_client():
     return _client
 
 
-def _chat(prompt: str) -> str:
+def _chat(prompt: str, db_context: dict | None = None) -> str:
     client = _get_client()
+    system_prompt = _build_system_prompt(db_context)
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         temperature=0.7,
-        max_tokens=1024,
+        max_tokens=1500,
     )
     return response.choices[0].message.content.strip()
 
 
-def _chat_with_history(question: str, history: list[dict]) -> str:
-    """Send a message with full conversation history for context-aware responses."""
+def _chat_with_history(question: str, history: list[dict], db_context: dict | None = None) -> str:
+    """Send a message with full conversation history + live DB context for accurate responses."""
     client = _get_client()
+    system_prompt = _build_system_prompt(db_context)
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt}]
 
     for msg in history:
         role = msg.get("role", "")
@@ -65,7 +135,7 @@ def _chat_with_history(question: str, history: list[dict]) -> str:
         model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.7,
-        max_tokens=1024,
+        max_tokens=1500,
     )
     return response.choices[0].message.content.strip()
 
@@ -120,7 +190,7 @@ Respond ONLY with a JSON object (no markdown, no code blocks) with exactly these
     return json.loads(text)
 
 
-def chat_with_ai(question: str, history: list[dict] = None) -> str:
+def chat_with_ai(question: str, history: list[dict] = None, db_context: dict | None = None) -> str:
     if history:
-        return _chat_with_history(question, history)
-    return _chat(question)
+        return _chat_with_history(question, history, db_context)
+    return _chat(question, db_context)

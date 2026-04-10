@@ -331,10 +331,57 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+def _get_db_context() -> dict:
+    """Fetch live database context to inject into the AI system prompt."""
+    try:
+        db = get_db()
+        # Stats
+        total_logs = db["logs"].count_documents({})
+        total_alerts = db["alerts"].count_documents({})
+        unresolved = db["alerts"].count_documents({"resolved": {"$ne": True}})
+        high_risk = db["alerts"].count_documents({"risk": "high", "resolved": {"$ne": True}})
+        last_alert = db["alerts"].find_one(sort=[("created_at", -1)])
+        last_ts = last_alert.get("created_at") if last_alert else None
+
+        stats = {
+            "logs_analyzed": total_logs,
+            "threats_detected": total_alerts,
+            "unresolved_alerts": unresolved,
+            "risk_level": "High" if high_risk > 0 else ("Medium" if unresolved > 0 else "Low"),
+            "last_incident": last_ts,
+        }
+
+        # Recent alerts (sorted by risk)
+        raw_alerts = list(db["alerts"].find(
+            {},
+            {"_id": 0, "title": 1, "type": 1, "risk": 1, "source": 1, "ip": 1,
+             "timestamp": 1, "resolved": 1, "description": 1}
+        ).sort([("created_at", -1)]).limit(30))
+
+        # Recent logs — suspicious first
+        recent_logs = list(db["logs"].find(
+            {},
+            {"_id": 0, "timestamp": 1, "ip": 1, "event": 1, "risk": 1,
+             "status": 1, "suspicious": 1, "event_type": 1, "raw": 1}
+        ).sort([("ingested_at", -1)]).limit(50))
+
+        # Recent sessions
+        sessions = list(db["sessions"].find(
+            {},
+            {"_id": 0, "date": 1, "logs_analyzed": 1, "threats_detected": 1,
+             "source_file": 1, "status": 1}
+        ).sort([("created_at", -1)]).limit(5))
+
+        return {"stats": stats, "alerts": raw_alerts, "logs": recent_logs, "sessions": sessions}
+    except Exception:
+        return {}
+
+
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     try:
-        response = chat_with_ai(req.message, req.history)
+        db_context = _get_db_context()
+        response = chat_with_ai(req.message, req.history, db_context)
         timestamp = datetime.utcnow().strftime("%H:%M")
 
         # Detect off-topic response

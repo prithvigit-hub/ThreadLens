@@ -12,7 +12,7 @@ interface Props {
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
     role: "ai",
-    content: "Hello! I'm your AI security analyst. Ask me anything about your logs, threats, or security events.",
+    content: "Hello! I'm your AI security analyst. I have live access to your logs, alerts, and threat data — ask me anything. For example: \"Summarize the threats detected\", \"What are the top suspicious IPs?\", or \"What should I do about the brute force attacks?\"",
     timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
   },
 ];
