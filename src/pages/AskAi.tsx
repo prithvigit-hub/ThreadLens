@@ -20,7 +20,9 @@ function formatDate(iso: string) {
 
 const AskAi = () => {
   const location = useLocation();
-  const initialMessage = (location.state as { initialMessage?: string } | null)?.initialMessage;
+  const locationState = location.state as { initialMessage?: string; initialAttachments?: { name: string; type: "image" | "text"; dataUrl?: string }[] } | null;
+  const initialMessage = locationState?.initialMessage;
+  const initialAttachments = locationState?.initialAttachments;
   const queryClient = useQueryClient();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState<string>("");
@@ -138,6 +140,7 @@ const AskAi = () => {
             sessionId={activeSessionId}
             onSessionCreated={handleSessionCreated}
             initialMessage={initialMessage}
+            initialAttachments={initialAttachments}
           />
         </div>
       </div>

@@ -14,6 +14,7 @@ interface Props {
   sessionId?: string | null;
   onSessionCreated?: (id: string, title: string) => void;
   initialMessage?: string;
+  initialAttachments?: { name: string; type: "image" | "text"; dataUrl?: string }[];
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = [
@@ -24,7 +25,7 @@ const INITIAL_MESSAGES: ChatMessage[] = [
   },
 ];
 
-export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage }: Props) {
+export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, initialAttachments }: Props) {
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState(initialMessage ?? "");
@@ -43,7 +44,17 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage }:
     if (initialMessage && !didAutoSend.current) {
       didAutoSend.current = true;
       const ts = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-      const userMsg: ChatMessage = { id: `u-auto`, role: "user", content: initialMessage, timestamp: ts };
+      const userMsg: ChatMessage = {
+        id: `u-auto`,
+        role: "user",
+        content: initialAttachments && initialAttachments.length > 0
+          ? (initialMessage.startsWith("Analyze the following") || initialMessage.startsWith("[Image")
+              ? initialAttachments[0].name
+              : initialMessage.split("\n\n--- Attached file:")[0] || initialMessage)
+          : initialMessage,
+        timestamp: ts,
+        attachments: initialAttachments,
+      };
       setMessages((prev) => {
         const updated = [...prev, userMsg];
         sendToAI(initialMessage, updated, ts);

@@ -1,7 +1,15 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Shield, Upload, Activity, Bot, Send, Zap, ChevronRight } from "lucide-react";
+import { Shield, Upload, Activity, Bot, Send, Zap, ChevronRight, Image as ImageIcon, Paperclip, X, FileText } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface AttachedFile {
+  name: string;
+  type: "image" | "text";
+  content: string;
+  dataUrl?: string;
+}
 
 const SUGGESTIONS = [
   "What are the most common attack patterns in my logs?",
@@ -13,16 +21,95 @@ const SUGGESTIONS = [
 const Home = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [query, setQuery] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAsk = () => {
     const q = query.trim();
-    if (!q) return;
-    navigate("/ask-ai", { state: { initialMessage: q } });
+    const hasAttachments = attachedFiles.length > 0;
+    if (!q && !hasAttachments) return;
+
+    const textFiles = attachedFiles.filter((f) => f.type === "text");
+    const imageFiles = attachedFiles.filter((f) => f.type === "image");
+
+    let fullMessage = q;
+    if (textFiles.length > 0) {
+      const fileContext = textFiles
+        .map((f) => `\n\n--- Attached file: ${f.name} ---\n${f.content}`)
+        .join("");
+      fullMessage = q ? q + fileContext : `Analyze the following attached file(s):${fileContext}`;
+    }
+    if (imageFiles.length > 0 && !fullMessage) {
+      fullMessage = imageFiles.map((f) => f.content).join(" ");
+    }
+
+    navigate("/ask-ai", {
+      state: {
+        initialMessage: fullMessage,
+        initialAttachments: attachedFiles.map((f) => ({
+          name: f.name,
+          type: f.type,
+          dataUrl: f.dataUrl,
+        })),
+      },
+    });
+  };
+
+  const handleImageAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setAttachedFiles((prev) => [
+        ...prev,
+        { name: file.name, type: "image", content: `[Image attached: ${file.name}]`, dataUrl },
+      ]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = [".csv", ".json", ".txt"];
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!allowed.includes(ext)) {
+      toast({ title: "Unsupported file", description: "Only .csv, .json, and .txt files are supported.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      toast({ title: "File too large", description: "Please attach files smaller than 500 KB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setAttachedFiles((prev) => [
+        ...prev,
+        { name: file.name, type: "text", content },
+      ]);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  const canSend = query.trim().length > 0 || attachedFiles.length > 0;
 
   return (
     <div className="min-h-screen bg-background dark flex flex-col">
@@ -63,21 +150,67 @@ const Home = () => {
                     handleAsk();
                   }
                 }}
-                placeholder="Ask anything about your logs or security threats..."
+                placeholder={attachedFiles.length > 0 ? "Add a message or send as-is..." : "Ask anything about your logs or security threats..."}
                 rows={3}
                 data-testid="input-home-query"
                 className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground/60 resize-none outline-none text-sm leading-relaxed"
               />
-              <button
-                onClick={handleAsk}
-                data-testid="button-home-ask"
-                disabled={!query.trim()}
-                className="cyber-btn !px-3 self-end disabled:opacity-40"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+              <div className="flex flex-col gap-1.5 self-end">
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  data-testid="button-home-attach-image"
+                  title="Attach image"
+                  className="cyber-btn !px-2.5 !py-1.5"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-home-attach-file"
+                  title="Attach CSV, JSON or TXT file"
+                  className="cyber-btn !px-2.5 !py-1.5"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleAsk}
+                  data-testid="button-home-ask"
+                  disabled={!canSend}
+                  className="cyber-btn !px-2.5 !py-1.5 disabled:opacity-40"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+
+            {attachedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                {attachedFiles.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-1.5 bg-muted/60 border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground"
+                    data-testid={`home-attachment-preview-${idx}`}
+                  >
+                    {file.type === "image" && file.dataUrl ? (
+                      <img src={file.dataUrl} alt={file.name} className="h-5 w-5 rounded object-cover" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 text-primary" />
+                    )}
+                    <span className="max-w-[140px] truncate">{file.name}</span>
+                    <button
+                      onClick={() => removeAttachment(idx)}
+                      className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid={`button-home-remove-attachment-${idx}`}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className={`flex flex-wrap gap-2 ${attachedFiles.length === 0 ? "border-t border-border pt-3" : ""}`}>
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
@@ -89,6 +222,23 @@ const Home = () => {
               ))}
             </div>
           </div>
+
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageAttach}
+            data-testid="input-home-image-upload"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.json,.txt"
+            className="hidden"
+            onChange={handleFileAttach}
+            data-testid="input-home-file-upload"
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <ActionCard
