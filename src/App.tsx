@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import CyberBackground from "@/components/CyberBackground";
 import Login from "./pages/Login.tsx";
 import Home from "./pages/Home.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
@@ -50,7 +51,10 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <div className="dark" style={{ minHeight: "100vh", background: "#080a14", position: "relative" }}>
+            <CyberBackground />
+            <AppRoutes />
+          </div>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

@@ -17,7 +17,7 @@ export function Layout({ children }: LayoutProps) {
   }, []);
 
   return (
-    <div className="min-h-screen flex w-full dark">
+    <div className="min-h-screen flex w-full dark relative z-10">
       <AppSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <TopNavbar threatDetected={threatDetected} />
