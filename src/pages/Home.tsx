@@ -305,7 +305,7 @@ const Home = () => {
                   <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user?.email ?? ""}</p>
                 </div>
                 <div className="py-1">
-                  <DropdownItem icon={User} label="Profile" onClick={() => { setMenuOpen(false); navigate("/settings"); }} testId="menu-item-profile" />
+                  <DropdownItem icon={User} label="Profile" onClick={() => { setMenuOpen(false); navigate("/profile"); }} testId="menu-item-profile" />
                   <DropdownItem icon={Settings} label="Settings" onClick={() => { setMenuOpen(false); navigate("/settings"); }} testId="menu-item-settings" />
                 </div>
                 <div className="border-t border-border py-1">

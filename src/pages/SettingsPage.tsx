@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
-import { Settings as SettingsIcon, Bell, Shield, Database, Monitor, User, Server, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Shield, Database, Monitor, User, Server, CheckCircle, XCircle, Loader2, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 
 interface SystemStatus {
@@ -44,7 +45,8 @@ function StatusDot({ status }: { status: "ok" | "error" | "loading" }) {
 }
 
 const SettingsPage = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<SystemStatus>({ backend: "loading", db: "loading", ai: "loading" });
 
   useEffect(() => {
@@ -74,29 +76,25 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        <div className="glass-panel rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-3">
-            <User className="w-5 h-5 text-primary" />
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">User Profile</h3>
-              <p className="text-xs text-muted-foreground">Your account information</p>
-            </div>
+        {/* Profile shortcut */}
+        <button
+          onClick={() => navigate("/profile")}
+          data-testid="settings-link-profile"
+          className="glass-panel rounded-xl p-5 w-full flex items-center gap-4 hover:border-primary/40 transition-all duration-200 group"
+        >
+          <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+            <span className="text-sm font-bold text-primary">
+              {(user?.name ?? "A").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+            </span>
           </div>
-          <div className="pl-8 space-y-3">
-            <div className="flex items-center justify-between text-sm py-2 border-b border-border/30">
-              <span className="text-muted-foreground">Name</span>
-              <span className="text-foreground font-medium">{user?.name ?? "—"}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm py-2 border-b border-border/30">
-              <span className="text-muted-foreground">Email</span>
-              <span className="text-foreground font-medium">{user?.email ?? "—"}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm py-2">
-              <span className="text-muted-foreground">Role</span>
-              <span className="text-primary font-medium">Security Analyst</span>
-            </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-sm font-semibold text-foreground">{user?.name ?? "Analyst"}</p>
+            <p className="text-xs text-muted-foreground">{user?.email ?? "—"} · Security Analyst</p>
           </div>
-        </div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-primary transition-colors">
+            View Profile <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        </button>
 
         <div className="glass-panel rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-3">

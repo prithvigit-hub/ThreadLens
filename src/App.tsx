@@ -12,6 +12,7 @@ import AnalyzeLogs from "./pages/AnalyzeLogs.tsx";
 import HistoryPage from "./pages/HistoryPage.tsx";
 import AskAi from "./pages/AskAi.tsx";
 import SettingsPage from "./pages/SettingsPage.tsx";
+import ProfilePage from "./pages/ProfilePage.tsx";
 import ReportPage from "./pages/ReportPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -36,6 +37,7 @@ function AppRoutes() {
       <Route path="/history" element={<PrivateRoute><HistoryPage /></PrivateRoute>} />
       <Route path="/ask-ai" element={<PrivateRoute><AskAi /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
+      <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
