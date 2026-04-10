@@ -42,7 +42,7 @@ const Login = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/15 glow-primary mb-5">
             <Shield className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">LLM Forensic Investigator</h1>
+          <h1 className="text-2xl font-bold text-foreground">Thread Lens</h1>
           <p className="text-sm text-muted-foreground mt-2">Sign in to your security dashboard</p>
         </div>
 

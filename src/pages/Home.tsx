@@ -1,7 +1,11 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Shield, Upload, Activity, Bot, Send, Zap, ChevronRight, Image as ImageIcon, Paperclip, X, FileText } from "lucide-react";
+import {
+  Shield, Upload, Activity, Bot, Send, Zap, ChevronRight,
+  Image as ImageIcon, Paperclip, X, FileText,
+  LayoutDashboard, LogOut, User, History,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface AttachedFile {
@@ -19,7 +23,7 @@ const SUGGESTIONS = [
 ];
 
 const Home = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [query, setQuery] = useState("");
@@ -106,30 +110,75 @@ const Home = () => {
     setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-
   const canSend = query.trim().length > 0 || attachedFiles.length > 0;
 
   return (
     <div className="min-h-screen bg-background dark flex flex-col">
+
+      {/* ── Brand bar ── */}
       <header className="h-14 border-b border-border bg-card/40 backdrop-blur-md flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center glow-primary">
             <Shield className="w-4 h-4 text-primary" />
           </div>
-          <span className="text-sm font-semibold text-foreground">LLM Forensic Investigator</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-base font-bold text-foreground tracking-tight">Thread Lens</span>
+            <span className="text-[10px] font-medium text-primary/80 uppercase tracking-widest hidden sm:block">Security</span>
+          </div>
         </div>
-        <button
-          onClick={() => navigate("/dashboard")}
-          data-testid="button-go-dashboard"
-          className="cyber-btn-outline text-xs !px-3 !py-1.5 flex items-center gap-1.5"
-        >
-          Open Dashboard
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
+              <User className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="font-medium text-foreground text-xs">{user?.name ?? "Analyst"}</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            data-testid="button-home-logout"
+            title="Sign out"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </header>
 
+      {/* ── Navigation bar ── */}
+      <nav className="h-11 border-b border-border bg-card/20 backdrop-blur-sm flex items-center px-6 gap-1 shrink-0">
+        {/* Group: Monitor & Ingest */}
+        <span className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mr-1 hidden sm:block">Monitor</span>
+        <NavBtn icon={Upload} label="Upload Logs" onClick={() => navigate("/analyze")} testId="nav-upload-logs" />
+        <NavBtn icon={Activity} label="Live Monitoring" onClick={() => navigate("/monitoring")} testId="nav-live-monitoring" dot />
+
+        <div className="w-px h-5 bg-border mx-2 shrink-0" />
+
+        {/* Group: Investigate */}
+        <span className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mr-1 hidden sm:block">Investigate</span>
+        <NavBtn icon={Bot} label="Ask AI" onClick={() => navigate("/ask-ai")} testId="nav-ask-ai" />
+        <NavBtn icon={History} label="History" onClick={() => navigate("/history")} testId="nav-history" />
+
+        <div className="w-px h-5 bg-border mx-2 shrink-0" />
+
+        {/* Group: Overview */}
+        <NavBtn
+          icon={LayoutDashboard}
+          label="Dashboard"
+          onClick={() => navigate("/dashboard")}
+          testId="nav-dashboard"
+          primary
+        />
+      </nav>
+
+      {/* ── Main content ── */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-12">
         <div className="w-full max-w-2xl space-y-10">
           <div className="text-center space-y-3">
@@ -223,22 +272,8 @@ const Home = () => {
             </div>
           </div>
 
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageAttach}
-            data-testid="input-home-image-upload"
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.json,.txt"
-            className="hidden"
-            onChange={handleFileAttach}
-            data-testid="input-home-file-upload"
-          />
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageAttach} data-testid="input-home-image-upload" />
+          <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" className="hidden" onChange={handleFileAttach} data-testid="input-home-file-upload" />
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <ActionCard
@@ -283,6 +318,33 @@ const Home = () => {
     </div>
   );
 };
+
+interface NavBtnProps {
+  icon: React.ElementType;
+  label: string;
+  onClick: () => void;
+  testId: string;
+  primary?: boolean;
+  dot?: boolean;
+}
+
+function NavBtn({ icon: Icon, label, onClick, testId, primary, dot }: NavBtnProps) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={testId}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 ${
+        primary
+          ? "bg-primary/15 text-primary hover:bg-primary/25"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+      }`}
+    >
+      <Icon className="w-3.5 h-3.5 shrink-0" />
+      <span className="hidden sm:block">{label}</span>
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-safe pulse-dot ml-0.5" />}
+    </button>
+  );
+}
 
 interface ActionCardProps {
   icon: React.ElementType;

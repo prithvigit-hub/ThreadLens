@@ -11,7 +11,7 @@ export function TopNavbar({ threatDetected = false }: TopNavbarProps) {
   return (
     <header className="h-14 border-b border-border bg-card/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0">
       <div className="flex items-center gap-4">
-        <h2 className="text-sm font-semibold text-foreground hidden sm:block">LLM-Powered Log Forensic Investigator</h2>
+        <h2 className="text-sm font-semibold text-foreground hidden sm:block">Thread Lens</h2>
         <div
           className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium transition-all ${
             threatDetected

@@ -32,8 +32,8 @@ export function AppSidebar() {
           <Shield className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-foreground leading-tight">LLM Forensic</h1>
-          <p className="text-xs text-muted-foreground">Investigator</p>
+          <h1 className="text-sm font-semibold text-foreground leading-tight">Thread Lens</h1>
+          <p className="text-[10px] text-primary/80 uppercase tracking-widest">Security</p>
         </div>
       </div>
 
