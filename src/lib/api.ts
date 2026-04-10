@@ -163,6 +163,7 @@ export interface ChatMessage {
   role: "user" | "ai";
   content: string;
   timestamp: string;
+  attachments?: { name: string; type: "image" | "text"; dataUrl?: string }[];
 }
 
 export interface ChatSession {
