@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Paperclip, Image as ImageIcon, X, FileText } from "lucide-react";
+import { Send, Bot, User, Loader2, Image as ImageIcon, X, FileText } from "lucide-react";
 import { api, type ChatMessage } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -38,7 +38,6 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
   const didAutoSend = useRef(false);
   const internallyCreatedSession = useRef<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (initialMessage && !didAutoSend.current) {
@@ -116,31 +115,6 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
       ]);
     };
     reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const allowed = [".csv", ".json", ".txt", ".log"];
-    const ext = "." + file.name.split(".").pop()?.toLowerCase();
-    if (!allowed.includes(ext)) {
-      toast({ title: "Unsupported file", description: "Only .csv, .json, .txt, and .log files are supported.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 500 * 1024) {
-      toast({ title: "File too large", description: "Please attach files smaller than 500 KB.", variant: "destructive" });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = ev.target?.result as string;
-      setAttachedFiles((prev) => [
-        ...prev,
-        { name: file.name, type: "text", content },
-      ]);
-    };
-    reader.readAsText(file);
     e.target.value = "";
   };
 
@@ -358,15 +332,6 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
             onChange={handleImageAttach}
             data-testid="input-image-upload"
           />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.json,.txt,.log"
-            className="hidden"
-            onChange={handleFileAttach}
-            data-testid="input-file-upload"
-          />
-
           <button
             onClick={() => imageInputRef.current?.click()}
             className="cyber-btn !px-2.5 shrink-0"
@@ -375,16 +340,6 @@ export function AiAnalysisPanel({ sessionId, onSessionCreated, initialMessage, i
             data-testid="button-attach-image"
           >
             <ImageIcon className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="cyber-btn !px-2.5 shrink-0"
-            title="Attach CSV, JSON or TXT file"
-            disabled={loading || loadingHistory}
-            data-testid="button-attach-file"
-          >
-            <Paperclip className="w-4 h-4" />
           </button>
 
           <input

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Upload, Activity, Bot, Send, Zap, ChevronRight,
-  Image as ImageIcon, Paperclip, X, FileText,
+  Image as ImageIcon, X, FileText,
   LayoutDashboard, LogOut, User, History, Settings,
   Shield, ChevronUp,
 } from "lucide-react";
@@ -81,7 +81,6 @@ const Home = () => {
 
   const menuRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -125,26 +124,6 @@ const Home = () => {
       setAttachedFiles((prev) => [...prev, { name: file.name, type: "image", content: `[Image attached: ${file.name}]`, dataUrl: ev.target?.result as string }]);
     };
     reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const ext = "." + file.name.split(".").pop()?.toLowerCase();
-    if (![".csv", ".json", ".txt", ".log"].includes(ext)) {
-      toast({ title: "Unsupported file", description: "Only .csv, .json, .txt, and .log files are supported.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 500 * 1024) {
-      toast({ title: "File too large", description: "Please attach files smaller than 500 KB.", variant: "destructive" });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setAttachedFiles((prev) => [...prev, { name: file.name, type: "text", content: ev.target?.result as string }]);
-    };
-    reader.readAsText(file);
     e.target.value = "";
   };
 
@@ -342,9 +321,6 @@ const Home = () => {
                   <button onClick={() => imageInputRef.current?.click()} data-testid="button-home-attach-image" title="Attach image" className="cyber-btn !px-2.5 !py-1.5">
                     <ImageIcon className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => fileInputRef.current?.click()} data-testid="button-home-attach-file" title="Attach CSV, JSON or TXT" className="cyber-btn !px-2.5 !py-1.5">
-                    <Paperclip className="w-3.5 h-3.5" />
-                  </button>
                   <button onClick={handleAsk} data-testid="button-home-ask" disabled={!canSend} className="cyber-btn !px-2.5 !py-1.5 disabled:opacity-40">
                     <Send className="w-3.5 h-3.5" />
                   </button>
@@ -377,7 +353,6 @@ const Home = () => {
             </div>
 
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageAttach} data-testid="input-home-image-upload" />
-            <input ref={fileInputRef} type="file" accept=".csv,.json,.txt,.log" className="hidden" onChange={handleFileAttach} data-testid="input-home-file-upload" />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <ActionCard icon={Upload} title="Upload Logs" description="Parse and analyze log files up to 10 GB with threat detection" color="primary" onClick={() => navigate("/analyze")} testId="card-upload-logs" />
