@@ -1,10 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Shield, Upload, Activity, Bot, Send, Zap, ChevronRight,
   Image as ImageIcon, Paperclip, X, FileText,
-  LayoutDashboard, LogOut, User, History,
+  LayoutDashboard, LogOut, User, History, Settings,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -28,8 +28,20 @@ const Home = () => {
   const { toast } = useToast();
   const [query, setQuery] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleAsk = () => {
     const q = query.trim();
@@ -134,21 +146,52 @@ const Home = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
-              <User className="w-3.5 h-3.5 text-primary" />
-            </div>
-            <span className="font-medium text-foreground text-xs">{user?.name ?? "Analyst"}</span>
-          </div>
+        {/* Avatar icon + dropdown */}
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={handleLogout}
-            data-testid="button-home-logout"
-            title="Sign out"
-            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            onClick={() => setMenuOpen((o) => !o)}
+            data-testid="button-home-profile-menu"
+            title="Account"
+            className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center hover:bg-primary/30 transition-colors"
           >
-            <LogOut className="w-3.5 h-3.5" />
+            <User className="w-4 h-4 text-primary" />
           </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-10 w-56 glass-panel rounded-xl border border-border shadow-lg z-50 py-1 animate-fade-in">
+              {/* Profile header */}
+              <div className="px-4 py-3 border-b border-border">
+                <p className="text-xs font-semibold text-foreground truncate">{user?.name ?? "Analyst"}</p>
+                <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user?.email ?? ""}</p>
+              </div>
+
+              {/* Menu items */}
+              <div className="py-1">
+                <DropdownItem
+                  icon={User}
+                  label="Profile"
+                  onClick={() => { setMenuOpen(false); navigate("/settings"); }}
+                  testId="menu-item-profile"
+                />
+                <DropdownItem
+                  icon={Settings}
+                  label="Settings"
+                  onClick={() => { setMenuOpen(false); navigate("/settings"); }}
+                  testId="menu-item-settings"
+                />
+              </div>
+
+              <div className="border-t border-border py-1">
+                <DropdownItem
+                  icon={LogOut}
+                  label="Sign out"
+                  onClick={() => { setMenuOpen(false); handleLogout(); }}
+                  testId="menu-item-logout"
+                  danger
+                />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -318,6 +361,31 @@ const Home = () => {
     </div>
   );
 };
+
+interface DropdownItemProps {
+  icon: React.ElementType;
+  label: string;
+  onClick: () => void;
+  testId: string;
+  danger?: boolean;
+}
+
+function DropdownItem({ icon: Icon, label, onClick, testId, danger }: DropdownItemProps) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={testId}
+      className={`w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
+        danger
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-foreground hover:bg-muted/60"
+      }`}
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+      {label}
+    </button>
+  );
+}
 
 interface NavBtnProps {
   icon: React.ElementType;
