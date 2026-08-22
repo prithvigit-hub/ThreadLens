@@ -77,10 +77,23 @@ backend/
   database.py               # MongoDB connection
 ```
 
-## Secrets Required
-- `GROQ_API_KEY` — Groq AI API key for chat and analysis features
+## Environment Variables
+- `MONGODB_URI` — MongoDB connection string; required for accounts, stored logs, alerts, and sessions
+- `GROQ_API_KEY` — Groq AI API key; required for chat and AI analysis
+- `JWT_SECRET` — long random signing secret for authentication tokens
+- `SMTP_EMAIL` / `SMTP_PASSWORD` — optional Gmail SMTP credentials for email verification
+
+Without MongoDB or Groq configured, both workflows still start and `/api/health`
+returns `status: ok`, while database-backed and AI actions report their missing
+service explicitly. Do not commit these values; use Replit Secrets locally and
+environment variables in VS Code.
 
 ## Dev & Run
+- **Install frontend dependencies**: `npm install`
+- **Install backend dependencies**: `python -m pip install -r backend/requirements.txt`
 - **Frontend**: `npm run dev` (port 5000, via "Start application" workflow)
 - **Backend**: `cd backend && python main.py` (port 8000, via "Backend API" workflow)
 - **Build**: `npm run build` (outputs to `dist/`)
+- **Lint**: `npm run lint`
+- **Tests**: `npm test`
+- **VS Code**: run the frontend and backend commands in separate terminals; Vite proxies `/api` to `http://localhost:8000`

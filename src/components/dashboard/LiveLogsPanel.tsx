@@ -33,7 +33,9 @@ export function LiveLogsPanel({ isActive = true }: Props) {
           });
           return;
         }
-      } catch (_) {}
+      } catch {
+        // Fall back to the local demo stream when the API is unavailable.
+      }
       const newLog = toApiLog(generateLogEntry(Date.now() + Math.floor(Math.random() * 10000)));
       setLogs((prev) => [newLog, ...prev.slice(0, 99)]);
     };

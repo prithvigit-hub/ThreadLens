@@ -28,7 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
       }
-    } catch {}
+    } catch {
+      // Ignore malformed local auth state and start signed out.
+    }
   }, []);
 
   const setAuth = (newToken: string, newUser: User) => {

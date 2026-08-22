@@ -78,7 +78,9 @@ function loadToggles(): Record<string, boolean> {
   try {
     const stored = localStorage.getItem("tl_settings_toggles");
     if (stored) return { ...DEFAULT_TOGGLES, ...JSON.parse(stored) };
-  } catch {}
+  } catch {
+    // Use defaults when saved settings are malformed.
+  }
   return { ...DEFAULT_TOGGLES };
 }
 
@@ -309,7 +311,9 @@ const SettingsPage = () => {
       const updated = { ...prev, [key]: !prev[key] };
       try {
         localStorage.setItem("tl_settings_toggles", JSON.stringify(updated));
-      } catch {}
+      } catch {
+        // Settings remain active for the current session if storage is unavailable.
+      }
       const label = SETTINGS_GROUPS.flatMap((g) => g.items).find((i) => i.key === key)?.label ?? key;
       toast({
         title: updated[key] ? "Setting enabled" : "Setting disabled",

@@ -5,7 +5,7 @@ import {
   CheckCircle, AlertTriangle, ShieldAlert, FileText, Brain,
   Loader2, ChevronRight, BarChart2, ArrowLeft,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, type Alert } from "@/lib/api";
 
 interface ReportState {
   logs_parsed: number;
@@ -41,10 +41,12 @@ const ReportPage = () => {
   const [investigation, setInvestigation] = useState<Investigation | null>(null);
   const [investigating, setInvestigating] = useState(false);
   const [investigationError, setInvestigationError] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
-    api.getAlerts().then((d) => setAlerts(d.alerts ?? [])).catch(() => {});
+    api.getAlerts().then((d) => setAlerts(d.alerts ?? [])).catch(() => {
+      // The report remains usable when alert history is unavailable.
+    });
   }, []);
 
   if (!state) {
@@ -68,7 +70,7 @@ const ReportPage = () => {
       const logsData = await api.getLogs(50);
       const result = await api.investigate(logsData.logs);
       setInvestigation(result as Investigation);
-    } catch (e: any) {
+    } catch {
       setInvestigationError("AI investigation failed. Please try again.");
     } finally {
       setInvestigating(false);

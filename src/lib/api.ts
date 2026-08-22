@@ -7,7 +7,9 @@ function getUserEmail(): string {
       const user = JSON.parse(stored);
       return user.email || "";
     }
-  } catch {}
+  } catch {
+    // Ignore malformed local user state.
+  }
   return "";
 }
 
