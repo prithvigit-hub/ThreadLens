@@ -410,14 +410,14 @@ def upload_status(job_id: str):
 def get_logs(limit: int = Query(100, le=500)):
     try:
         db = get_db()
+        docs = list(db["logs"].find({}, {"_id": 1, "timestamp": 1, "ip": 1, "event": 1,
+                                         "status": 1, "risk": 1, "suspicious": 1, "level": 1, "raw": 1})
+                    .sort("ingested_at", -1).limit(limit))
+        for d in docs:
+            d["id"] = d.pop("_id")
+        return {"logs": docs, "total": len(docs)}
     except Exception as exc:
         raise HTTPException(503, f"Log storage is unavailable: {exc}")
-    docs = list(db["logs"].find({}, {"_id": 1, "timestamp": 1, "ip": 1, "event": 1,
-                                     "status": 1, "risk": 1, "suspicious": 1, "level": 1, "raw": 1})
-                .sort("ingested_at", -1).limit(limit))
-    for d in docs:
-        d["id"] = d.pop("_id")
-    return {"logs": docs, "total": len(docs)}
 
 
 # ─── Live Logs ─────────────────────────────────────────────────────────────────

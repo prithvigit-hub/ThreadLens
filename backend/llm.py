@@ -107,7 +107,7 @@ def _chat(prompt: str, db_context: dict | None = None) -> str:
     client = _get_client()
     system_prompt = _build_system_prompt(db_context)
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
@@ -136,7 +136,7 @@ def _chat_with_history(question: str, history: list[dict], db_context: dict | No
     messages.append({"role": "user", "content": question})
 
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=messages,
         temperature=0.7,
         max_tokens=1500,
