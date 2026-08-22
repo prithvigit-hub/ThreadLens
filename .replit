@@ -64,6 +64,3 @@ localPort = 8000
 externalPort = 8000
 
 [userenv]
-
-[userenv.shared]
-JWT_SECRET = "114c1e34304864034ef92c56126cda93546288be3aee3d00c979f7810378efaa"

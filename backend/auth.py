@@ -10,7 +10,9 @@ from typing import Optional
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "fallback-secret-change-me")
+# Prefer the dedicated JWT secret, while allowing the managed session secret
+# already present in this workspace to sign tokens without committing secrets.
+JWT_SECRET = os.environ.get("JWT_SECRET") or os.environ.get("SESSION_SECRET", "")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

@@ -22,7 +22,7 @@ def get_owner(request: Request) -> str:
 from database import get_db, ping_db
 from parser import parse_logs, parse_line
 from detector import detect_threats
-from llm import analyze_event, investigate_sequence, chat_with_ai
+from llm import analyze_event, investigate_sequence, chat_with_ai, ai_configured
 from auth import (
     hash_password, verify_password, create_access_token,
     decode_token, generate_otp, send_verification_email
@@ -235,7 +235,7 @@ def health():
         db_ok = ping_db()
     except Exception:
         pass
-    return {"status": "ok", "db_connected": db_ok}
+    return {"status": "ok", "db_connected": db_ok, "ai_configured": ai_configured()}
 
 
 # ─── Upload ────────────────────────────────────────────────────────────────────
@@ -408,7 +408,10 @@ def upload_status(job_id: str):
 
 @app.get("/api/logs")
 def get_logs(limit: int = Query(100, le=500)):
-    db = get_db()
+    try:
+        db = get_db()
+    except Exception as exc:
+        raise HTTPException(503, f"Log storage is unavailable: {exc}")
     docs = list(db["logs"].find({}, {"_id": 1, "timestamp": 1, "ip": 1, "event": 1,
                                      "status": 1, "risk": 1, "suspicious": 1, "level": 1, "raw": 1})
                 .sort("ingested_at", -1).limit(limit))

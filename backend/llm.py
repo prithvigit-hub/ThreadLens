@@ -6,6 +6,10 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 _client = None
 
+
+def ai_configured() -> bool:
+    return bool(GROQ_API_KEY)
+
 BASE_SYSTEM_PROMPT = (
     "You are an AI cybersecurity analyst assistant integrated into an LLM-Powered "
     "Log Forensic Investigator dashboard. You ONLY answer questions strictly related to: "

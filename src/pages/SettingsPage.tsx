@@ -299,7 +299,7 @@ const SettingsPage = () => {
   useEffect(() => {
     api.health()
       .then((data) => {
-        setStatus({ backend: "ok", db: data.db_connected ? "ok" : "error", ai: "ok" });
+        setStatus({ backend: "ok", db: data.db_connected ? "ok" : "error", ai: data.ai_configured ? "ok" : "error" });
       })
       .catch(() => {
         setStatus({ backend: "error", db: "error", ai: "error" });

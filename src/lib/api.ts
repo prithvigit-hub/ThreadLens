@@ -46,7 +46,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ status: string; db_connected: boolean }>("/api/health"),
+  health: () => request<{ status: string; db_connected: boolean; ai_configured: boolean }>("/api/health"),
 
   stats: () =>
     request<{
